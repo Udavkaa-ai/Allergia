@@ -47,6 +47,14 @@ fun DiaryScreen(
     val labelState by viewModel.labelAnalysisState.collectAsState()
     val householdProducts by viewModel.householdProducts.collectAsState()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.toastMessage.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
+
     val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("ru")))
 
     // URI для снимка камеры (еда)
@@ -209,7 +217,8 @@ fun DiaryScreen(
                 text = { Text("Сфоткать еду") },
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
