@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Leaf shape symbolising health/allergy tracking -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,20 C54,20 30,40 30,60 C30,73.25 40.75,84 54,84 C67.25,84 78,73.25 78,60 C78,40 54,20 54,20 Z"/>
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M54,30 L54,80"
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="2"/>
+</vector>
