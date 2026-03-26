@@ -1,20 +1,16 @@
 package com.allergia.api
 
 import android.content.Context
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.allergia.data.models.*
 import com.allergia.data.repository.DiaryRangeData
-import com.allergia.data.models.HouseholdProduct
+import com.allergia.utils.appDataStore
+import com.allergia.utils.PreferenceKeys
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.dataStore by preferencesDataStore(name = "settings")
-private val API_KEY_PREF = stringPreferencesKey("openrouter_api_key")
 
 @Singleton
 class GeminiService @Inject constructor(
@@ -25,7 +21,7 @@ class GeminiService @Inject constructor(
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
     private suspend fun authHeader(): String {
-        val key = context.dataStore.data.map { it[API_KEY_PREF] ?: "" }.first()
+        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first()
         if (key.isBlank()) throw Exception("API ключ не настроен. Перейдите в Настройки и введите ключ OpenRouter.")
         return "Bearer $key"
     }

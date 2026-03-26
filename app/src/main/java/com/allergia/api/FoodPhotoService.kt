@@ -2,10 +2,10 @@ package com.allergia.api
 
 import android.content.Context
 import android.net.Uri
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.allergia.data.models.MealType
 import com.allergia.utils.ImageUtils
+import com.allergia.utils.PreferenceKeys
+import com.allergia.utils.appDataStore
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
@@ -14,9 +14,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.photoDataStore by preferencesDataStore(name = "settings")
-private val PHOTO_API_KEY_PREF = stringPreferencesKey("openrouter_api_key")
 
 @Singleton
 class FoodPhotoService @Inject constructor(
@@ -30,7 +27,7 @@ class FoodPhotoService @Inject constructor(
     }
 
     private suspend fun authHeader(): String {
-        val key = context.photoDataStore.data.map { it[PHOTO_API_KEY_PREF] ?: "" }.first()
+        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first()
         if (key.isBlank()) throw Exception("API ключ не настроен. Перейдите в Настройки.")
         return "Bearer $key"
     }

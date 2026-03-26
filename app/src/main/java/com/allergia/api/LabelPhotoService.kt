@@ -2,11 +2,11 @@ package com.allergia.api
 
 import android.content.Context
 import android.net.Uri
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.allergia.data.models.AllergenicIngredient
 import com.allergia.data.models.LabelRecognitionResult
 import com.allergia.utils.ImageUtils
+import com.allergia.utils.PreferenceKeys
+import com.allergia.utils.appDataStore
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -14,9 +14,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.labelDataStore by preferencesDataStore(name = "settings")
-private val LABEL_API_KEY_PREF = stringPreferencesKey("openrouter_api_key")
 
 @Singleton
 class LabelPhotoService @Inject constructor(
@@ -72,7 +69,7 @@ class LabelPhotoService @Inject constructor(
     }
 
     private suspend fun authHeader(): String {
-        val key = context.labelDataStore.data.map { it[LABEL_API_KEY_PREF] ?: "" }.first()
+        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first()
         if (key.isBlank()) throw Exception("API ключ не настроен. Перейдите в Настройки.")
         return "Bearer $key"
     }

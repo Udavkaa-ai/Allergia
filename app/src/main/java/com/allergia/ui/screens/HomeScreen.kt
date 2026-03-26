@@ -39,6 +39,7 @@ fun HomeScreen(
     val medications by viewModel.medications.collectAsState()
     val skinCondition by viewModel.skinCondition.collectAsState()
     val symptoms by viewModel.symptoms.collectAsState()
+    val allEntries by viewModel.allEntries.collectAsState()
 
     val todayFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale("ru"))
     val today = LocalDate.now()

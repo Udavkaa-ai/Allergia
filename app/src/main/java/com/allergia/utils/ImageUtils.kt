@@ -89,9 +89,10 @@ object ImageUtils {
         opts.inSampleSize = calculateInSampleSize(opts.outWidth, opts.outHeight)
         opts.inJustDecodeBounds = false
 
-        return context.contentResolver.openInputStream(uri)!!.use { stream ->
-            BitmapFactory.decodeStream(stream, null, opts)!!
-        }
+        val stream = context.contentResolver.openInputStream(uri)
+            ?: throw IllegalArgumentException("Cannot open URI: $uri")
+        return stream.use { BitmapFactory.decodeStream(it, null, opts) }
+            ?: throw IllegalArgumentException("Failed to decode bitmap from URI: $uri")
     }
 
     private fun calculateInSampleSize(width: Int, height: Int): Int {
