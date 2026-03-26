@@ -19,7 +19,7 @@ import com.allergia.ui.components.AllergenicityBadge
 import com.allergia.ui.viewmodels.AllergenicityUiState
 import com.allergia.ui.viewmodels.DiaryViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProductSearchScreen(
     onBack: () -> Unit,
@@ -78,7 +78,7 @@ fun ProductSearchScreen(
                 enabled = query.isNotBlank() && state !is AllergenicityUiState.Loading,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.BiotechOutlined, null)
+                Icon(Icons.Default.Science, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Оценить аллергенность")
             }
@@ -200,6 +200,7 @@ private fun AllergenicityResultCard(result: ProductAllergenicityResponse) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InfoChipsCard(title: String, items: List<String>, color: Color) {
     Card {
