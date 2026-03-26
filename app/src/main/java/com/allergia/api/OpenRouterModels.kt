@@ -4,7 +4,7 @@ import com.google.gson.annotations.SerializedName
 
 // Request
 data class OpenRouterRequest(
-    val model: String = "google/gemini-2.5-flash-preview",
+    val model: String = Models.ANALYSIS,
     val messages: List<ChatMessage>,
     val temperature: Double = 0.3,
     @SerializedName("max_tokens") val maxTokens: Int = 4096,

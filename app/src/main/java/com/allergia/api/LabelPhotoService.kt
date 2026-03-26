@@ -26,7 +26,7 @@ class LabelPhotoService @Inject constructor(
     private val gson = Gson()
 
     companion object {
-        private const val VISION_MODEL = "google/gemma-3-4b-it:free"
+        private val VISION_MODEL = Models.LABEL_SCAN
 
         // Список ключевых аллергенных ингредиентов косметики для дообогащения результата
         val KNOWN_ALLERGENS = mapOf(
