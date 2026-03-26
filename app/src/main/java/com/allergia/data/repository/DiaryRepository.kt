@@ -2,6 +2,7 @@ package com.allergia.data.repository
 
 import com.allergia.data.database.DiaryDao
 import com.allergia.data.models.*
+import com.allergia.utils.BackupData
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import javax.inject.Inject
@@ -59,6 +60,38 @@ class DiaryRepository @Inject constructor(
     fun getAllAnalyses(): Flow<List<AnalysisResult>> = dao.getAllAnalyses()
     suspend fun saveAnalysis(result: AnalysisResult): Long = dao.insertAnalysis(result)
     suspend fun getLatestAnalysis(): AnalysisResult? = dao.getLatestAnalysis()
+
+    // ── Backup / Restore ──────────────────────────────────────────────────────
+
+    suspend fun getFullBackup(): BackupData = BackupData(
+        diaryEntries       = dao.getAllEntriesList(),
+        foodItems          = dao.getAllFoodItemsList(),
+        medications        = dao.getAllMedicationsList(),
+        skinConditions     = dao.getAllSkinConditionsList(),
+        symptoms           = dao.getAllSymptomsList(),
+        householdProducts  = dao.getAllHouseholdProductsList(),
+        analysisResults    = dao.getAllAnalysisResultsList()
+    )
+
+    suspend fun restoreFromBackup(data: BackupData) {
+        // Order: clear child tables first (FK constraints), then parent
+        dao.clearAnalysisResults()
+        dao.clearHouseholdProducts()
+        dao.clearSymptoms()
+        dao.clearSkinConditions()
+        dao.clearMedications()
+        dao.clearFoodItems()
+        dao.clearDiaryEntries()
+
+        // Restore parent first, then children
+        dao.insertAllEntries(data.diaryEntries)
+        dao.insertAllFoodItems(data.foodItems)
+        dao.insertAllMedications(data.medications)
+        dao.insertAllSkinConditions(data.skinConditions)
+        dao.insertAllSymptoms(data.symptoms)
+        dao.insertAllHouseholdProducts(data.householdProducts)
+        dao.insertAllAnalysisResults(data.analysisResults)
+    }
 
     // Data for AI context (now includes household products)
     suspend fun getDataForRange(from: LocalDate, to: LocalDate): DiaryRangeData {

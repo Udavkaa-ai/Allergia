@@ -116,4 +116,60 @@ interface DiaryDao {
 
     @Query("SELECT * FROM analysis_results ORDER BY analyzedAt DESC LIMIT 1")
     suspend fun getLatestAnalysis(): AnalysisResult?
+
+    // ── Backup: full-table reads ──────────────────────────────────────────────
+
+    @Query("SELECT * FROM diary_entries ORDER BY date")
+    suspend fun getAllEntriesList(): List<DiaryEntry>
+
+    @Query("SELECT * FROM food_items ORDER BY entryDate, id")
+    suspend fun getAllFoodItemsList(): List<FoodItem>
+
+    @Query("SELECT * FROM medications ORDER BY entryDate, id")
+    suspend fun getAllMedicationsList(): List<Medication>
+
+    @Query("SELECT * FROM skin_conditions ORDER BY entryDate")
+    suspend fun getAllSkinConditionsList(): List<SkinCondition>
+
+    @Query("SELECT * FROM allergy_symptoms ORDER BY entryDate, symptomType")
+    suspend fun getAllSymptomsList(): List<AllergySymptom>
+
+    @Query("SELECT * FROM household_products ORDER BY entryDate, id")
+    suspend fun getAllHouseholdProductsList(): List<HouseholdProduct>
+
+    @Query("SELECT * FROM analysis_results ORDER BY analyzedAt")
+    suspend fun getAllAnalysisResultsList(): List<AnalysisResult>
+
+    // ── Backup: batch inserts for restore ────────────────────────────────────
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllEntries(entries: List<DiaryEntry>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllFoodItems(items: List<FoodItem>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllMedications(meds: List<Medication>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllSkinConditions(conditions: List<SkinCondition>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllSymptoms(symptoms: List<AllergySymptom>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllHouseholdProducts(products: List<HouseholdProduct>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllAnalysisResults(results: List<AnalysisResult>)
+
+    // ── Backup: table clears for full restore ────────────────────────────────
+
+    @Query("DELETE FROM food_items")         suspend fun clearFoodItems()
+    @Query("DELETE FROM medications")        suspend fun clearMedications()
+    @Query("DELETE FROM skin_conditions")    suspend fun clearSkinConditions()
+    @Query("DELETE FROM allergy_symptoms")   suspend fun clearSymptoms()
+    @Query("DELETE FROM household_products") suspend fun clearHouseholdProducts()
+    @Query("DELETE FROM analysis_results")   suspend fun clearAnalysisResults()
+    @Query("DELETE FROM diary_entries")      suspend fun clearDiaryEntries()
 }

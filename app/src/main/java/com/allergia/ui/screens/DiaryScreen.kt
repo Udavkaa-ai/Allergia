@@ -618,7 +618,7 @@ private fun SkinConditionSection(condition: SkinCondition?, onSave: (Int, Int, I
                     SeverityRow("Зуд", itching, { itching = it })
                     SeverityRow("Сыпь", rash, { rash = it })
                     SeverityRow("Отёк", swelling, { swelling = it })
-                    SeverityRow("Сухость", dryness, { dryness = it })
+                    SeverityRow("Шелушение", dryness, { dryness = it })
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(value = areas, onValueChange = { areas = it }, label = { Text("Поражённые области") }, placeholder = { Text("лицо, шея, руки...") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
