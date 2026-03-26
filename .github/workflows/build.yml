@@ -27,12 +27,17 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Write local.properties with API key
+      - name: Write gradle.properties with API key
         run: |
           echo "OPENROUTER_API_KEY=${{ secrets.AI_API_KEY }}" >> gradle.properties
 
+      - name: Write local.properties with SDK path
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
