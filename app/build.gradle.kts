@@ -87,6 +87,9 @@ dependencies {
     // Coil
     implementation(libs.coil.compose)
 
+    // ExifInterface for photo orientation correction
+    implementation(libs.androidx.exifinterface)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

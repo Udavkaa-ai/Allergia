@@ -66,4 +66,13 @@ object AppModule {
     ): GeminiService {
         return GeminiService(api, context)
     }
+
+    @Provides
+    @Singleton
+    fun provideFoodPhotoService(
+        api: OpenRouterApi,
+        @ApplicationContext context: Context
+    ): com.allergia.api.FoodPhotoService {
+        return com.allergia.api.FoodPhotoService(api, context)
+    }
 }

@@ -1,7 +1,11 @@
 package com.allergia.ui.viewmodels
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.allergia.api.DetectedFoodItem
+import com.allergia.api.FoodPhotoService
+import com.allergia.api.FoodRecognitionResult
 import com.allergia.api.GeminiService
 import com.allergia.api.ProductAllergenicityResponse
 import com.allergia.data.models.*
@@ -15,7 +19,8 @@ import javax.inject.Inject
 @HiltViewModel
 class DiaryViewModel @Inject constructor(
     private val repository: DiaryRepository,
-    private val geminiService: GeminiService
+    private val geminiService: GeminiService,
+    private val foodPhotoService: FoodPhotoService
 ) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
@@ -43,12 +48,72 @@ class DiaryViewModel @Inject constructor(
     private val _allergenicityState = MutableStateFlow<AllergenicityUiState>(AllergenicityUiState.Idle)
     val allergenicityState: StateFlow<AllergenicityUiState> = _allergenicityState.asStateFlow()
 
+    // ─── Photo recognition state ─────────────────────────────────────────────
+
+    private val _photoAnalysisState = MutableStateFlow<PhotoAnalysisState>(PhotoAnalysisState.Idle)
+    val photoAnalysisState: StateFlow<PhotoAnalysisState> = _photoAnalysisState.asStateFlow()
+
     private val _toastMessage = MutableSharedFlow<String>()
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
         viewModelScope.launch { repository.getOrCreateEntry(date) }
+    }
+
+    // ─── Photo analysis ───────────────────────────────────────────────────────
+
+    /**
+     * Отправляет фото в Gemma 3 4B, разбирает ответ и показывает диалог подтверждения.
+     */
+    fun analyzeFoodPhoto(imageUri: Uri) {
+        _photoAnalysisState.value = PhotoAnalysisState.Analyzing
+        viewModelScope.launch {
+            foodPhotoService.recognizeFoodFromPhoto(imageUri)
+                .onSuccess { result ->
+                    if (result.items.isEmpty()) {
+                        _photoAnalysisState.value = PhotoAnalysisState.NoFoodDetected
+                    } else {
+                        _photoAnalysisState.value = PhotoAnalysisState.Results(
+                            result = result,
+                            editableItems = result.items.map { it.copy() }.toMutableList()
+                        )
+                    }
+                }
+                .onFailure { err ->
+                    _photoAnalysisState.value = PhotoAnalysisState.Error(
+                        err.message ?: "Ошибка распознавания"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Пользователь подтвердил список — добавляем выбранные позиции в дневник
+     * и запускаем оценку аллергенности фоном.
+     */
+    fun confirmPhotoItems(items: List<DetectedFoodItem>) {
+        viewModelScope.launch {
+            val date = _selectedDate.value
+            repository.getOrCreateEntry(date)
+            items.filter { it.isSelected }.forEach { detected ->
+                val mealType = runCatching { MealType.valueOf(detected.mealType) }.getOrDefault(MealType.OTHER)
+                val foodItem = FoodItem(
+                    entryDate = date,
+                    name = detected.name.trim(),
+                    amount = detected.estimatedAmount,
+                    mealType = mealType
+                )
+                val id = repository.insertFoodItem(foodItem)
+                assessAllergenicity(foodItem.copy(id = id))
+            }
+            _toastMessage.emit("Добавлено ${items.count { it.isSelected }} продуктов")
+            _photoAnalysisState.value = PhotoAnalysisState.Idle
+        }
+    }
+
+    fun dismissPhotoAnalysis() {
+        _photoAnalysisState.value = PhotoAnalysisState.Idle
     }
 
     // ─── Food ────────────────────────────────────────────────────────────────
@@ -60,7 +125,6 @@ class DiaryViewModel @Inject constructor(
             repository.getOrCreateEntry(date)
             val item = FoodItem(entryDate = date, name = name.trim(), amount = amount.trim(), mealType = mealType)
             val id = repository.insertFoodItem(item)
-            // Async allergenicity assessment
             assessAllergenicity(item.copy(id = id))
         }
     }
@@ -81,7 +145,6 @@ class DiaryViewModel @Inject constructor(
                         )
                     )
                 }
-                .onFailure { /* score stays null, will retry on demand */ }
         }
     }
 
@@ -167,9 +230,22 @@ class DiaryViewModel @Inject constructor(
     }
 }
 
+// ─── UI States ────────────────────────────────────────────────────────────────
+
 sealed class AllergenicityUiState {
     object Idle : AllergenicityUiState()
     object Loading : AllergenicityUiState()
     data class Success(val result: ProductAllergenicityResponse) : AllergenicityUiState()
     data class Error(val message: String) : AllergenicityUiState()
+}
+
+sealed class PhotoAnalysisState {
+    object Idle : PhotoAnalysisState()
+    object Analyzing : PhotoAnalysisState()
+    object NoFoodDetected : PhotoAnalysisState()
+    data class Results(
+        val result: FoodRecognitionResult,
+        val editableItems: MutableList<DetectedFoodItem>
+    ) : PhotoAnalysisState()
+    data class Error(val message: String) : PhotoAnalysisState()
 }

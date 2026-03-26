@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Internal storage for compressed food photos -->
+    <files-path name="food_photos" path="food_photos/" />
+    <!-- External cache for temporary camera files (fallback) -->
+    <external-cache-path name="camera_cache" path="." />
+</paths>
