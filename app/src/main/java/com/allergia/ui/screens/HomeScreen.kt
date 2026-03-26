@@ -108,38 +108,18 @@ fun HomeScreen(
                 }
             }
 
-            // Summary cards
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SummaryCard(
-                    icon = "🍽",
-                    label = "Продукты",
-                    count = foodItems.size,
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    icon = "💊",
-                    label = "Медикам.",
-                    count = medications.size,
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    icon = "🔬",
-                    label = "Кожа",
-                    count = skinCondition?.overallSeverity ?: 0,
-                    suffix = "/3",
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    icon = "🤧",
-                    label = "Симптомы",
-                    count = symptoms.size,
-                    modifier = Modifier.weight(1f)
-                )
+            // Summary cards — 2 rows of 3
+            val cardMod = Modifier.weight(1f)
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SummaryCard(icon = "🍽", label = "Продукты", count = foodItems.size, modifier = cardMod)
+                SummaryCard(icon = "💊", label = "Медикам.", count = medications.size, modifier = cardMod)
+                SummaryCard(icon = "🧴", label = "Химия", count = 0, modifier = cardMod)
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SummaryCard(icon = "🔬", label = "Кожа", count = skinCondition?.overallSeverity ?: 0, suffix = "/3", modifier = cardMod)
+                SummaryCard(icon = "🤧", label = "Симптомы", count = symptoms.size, modifier = cardMod)
+                SummaryCard(icon = "📅", label = "Записей", count = allEntries.size, modifier = cardMod)
             }
 
             Spacer(Modifier.height(12.dp))

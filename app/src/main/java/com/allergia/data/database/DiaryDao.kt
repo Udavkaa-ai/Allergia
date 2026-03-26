@@ -88,6 +88,25 @@ interface DiaryDao {
     @Query("SELECT * FROM allergy_symptoms WHERE entryDate BETWEEN :from AND :to ORDER BY entryDate, symptomType")
     suspend fun getSymptomsInRange(from: LocalDate, to: LocalDate): List<AllergySymptom>
 
+    // HouseholdProduct
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHouseholdProduct(product: HouseholdProduct): Long
+
+    @Update
+    suspend fun updateHouseholdProduct(product: HouseholdProduct)
+
+    @Delete
+    suspend fun deleteHouseholdProduct(product: HouseholdProduct)
+
+    @Query("SELECT * FROM household_products WHERE entryDate = :date ORDER BY category, id")
+    fun getProductsForDate(date: LocalDate): Flow<List<HouseholdProduct>>
+
+    @Query("SELECT * FROM household_products WHERE entryDate BETWEEN :from AND :to ORDER BY entryDate, category")
+    suspend fun getProductsInRange(from: LocalDate, to: LocalDate): List<HouseholdProduct>
+
+    @Query("SELECT * FROM household_products WHERE name LIKE '%' || :query || '%' ORDER BY entryDate DESC LIMIT 20")
+    suspend fun searchProducts(query: String): List<HouseholdProduct>
+
     // AnalysisResult
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAnalysis(result: AnalysisResult): Long

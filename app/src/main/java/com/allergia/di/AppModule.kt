@@ -75,4 +75,13 @@ object AppModule {
     ): com.allergia.api.FoodPhotoService {
         return com.allergia.api.FoodPhotoService(api, context)
     }
+
+    @Provides
+    @Singleton
+    fun provideLabelPhotoService(
+        api: OpenRouterApi,
+        @ApplicationContext context: Context
+    ): com.allergia.api.LabelPhotoService {
+        return com.allergia.api.LabelPhotoService(api, context)
+    }
 }

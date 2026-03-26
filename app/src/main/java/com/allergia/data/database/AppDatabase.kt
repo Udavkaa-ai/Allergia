@@ -12,9 +12,10 @@ import com.allergia.data.models.*
         Medication::class,
         SkinCondition::class,
         AllergySymptom::class,
-        AnalysisResult::class
+        AnalysisResult::class,
+        HouseholdProduct::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

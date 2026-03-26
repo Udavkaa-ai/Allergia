@@ -48,18 +48,26 @@ class DiaryRepository @Inject constructor(
     suspend fun deleteSymptom(symptom: AllergySymptom) = dao.deleteSymptom(symptom)
     suspend fun getSymptomsInRange(from: LocalDate, to: LocalDate) = dao.getSymptomsInRange(from, to)
 
+    // Household Products
+    fun getProductsForDate(date: LocalDate): Flow<List<HouseholdProduct>> = dao.getProductsForDate(date)
+    suspend fun insertProduct(product: HouseholdProduct): Long = dao.insertHouseholdProduct(product)
+    suspend fun updateProduct(product: HouseholdProduct) = dao.updateHouseholdProduct(product)
+    suspend fun deleteProduct(product: HouseholdProduct) = dao.deleteHouseholdProduct(product)
+    suspend fun getProductsInRange(from: LocalDate, to: LocalDate) = dao.getProductsInRange(from, to)
+
     // Analysis
     fun getAllAnalyses(): Flow<List<AnalysisResult>> = dao.getAllAnalyses()
     suspend fun saveAnalysis(result: AnalysisResult): Long = dao.insertAnalysis(result)
     suspend fun getLatestAnalysis(): AnalysisResult? = dao.getLatestAnalysis()
 
-    // Data for AI context
+    // Data for AI context (now includes household products)
     suspend fun getDataForRange(from: LocalDate, to: LocalDate): DiaryRangeData {
         return DiaryRangeData(
             foods = dao.getFoodItemsInRange(from, to),
             medications = dao.getMedicationsInRange(from, to),
             skinConditions = dao.getSkinConditionsInRange(from, to),
             symptoms = dao.getSymptomsInRange(from, to),
+            householdProducts = dao.getProductsInRange(from, to),
             periodStart = from,
             periodEnd = to
         )
@@ -71,6 +79,7 @@ data class DiaryRangeData(
     val medications: List<Medication>,
     val skinConditions: List<SkinCondition>,
     val symptoms: List<AllergySymptom>,
+    val householdProducts: List<HouseholdProduct>,
     val periodStart: LocalDate,
     val periodEnd: LocalDate
 )

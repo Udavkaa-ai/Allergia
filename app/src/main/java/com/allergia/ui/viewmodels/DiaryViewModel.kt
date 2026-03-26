@@ -7,6 +7,7 @@ import com.allergia.api.DetectedFoodItem
 import com.allergia.api.FoodPhotoService
 import com.allergia.api.FoodRecognitionResult
 import com.allergia.api.GeminiService
+import com.allergia.api.LabelPhotoService
 import com.allergia.api.ProductAllergenicityResponse
 import com.allergia.data.models.*
 import com.allergia.data.repository.DiaryRepository
@@ -20,7 +21,8 @@ import javax.inject.Inject
 class DiaryViewModel @Inject constructor(
     private val repository: DiaryRepository,
     private val geminiService: GeminiService,
-    private val foodPhotoService: FoodPhotoService
+    private val foodPhotoService: FoodPhotoService,
+    private val labelPhotoService: LabelPhotoService
 ) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
@@ -50,8 +52,15 @@ class DiaryViewModel @Inject constructor(
 
     // ─── Photo recognition state ─────────────────────────────────────────────
 
+    val householdProducts: StateFlow<List<HouseholdProduct>> = _selectedDate
+        .flatMapLatest { repository.getProductsForDate(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _photoAnalysisState = MutableStateFlow<PhotoAnalysisState>(PhotoAnalysisState.Idle)
     val photoAnalysisState: StateFlow<PhotoAnalysisState> = _photoAnalysisState.asStateFlow()
+
+    private val _labelAnalysisState = MutableStateFlow<LabelAnalysisState>(LabelAnalysisState.Idle)
+    val labelAnalysisState: StateFlow<LabelAnalysisState> = _labelAnalysisState.asStateFlow()
 
     private val _toastMessage = MutableSharedFlow<String>()
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
@@ -115,6 +124,71 @@ class DiaryViewModel @Inject constructor(
     fun dismissPhotoAnalysis() {
         _photoAnalysisState.value = PhotoAnalysisState.Idle
     }
+
+    // ─── Label photo analysis ────────────────────────────────────────────────
+
+    fun analyzeLabelPhoto(imageUri: Uri) {
+        _labelAnalysisState.value = LabelAnalysisState.Analyzing
+        viewModelScope.launch {
+            labelPhotoService.recognizeIngredients(imageUri)
+                .onSuccess { result ->
+                    _labelAnalysisState.value = LabelAnalysisState.Results(result, imageUri)
+                }
+                .onFailure { err ->
+                    _labelAnalysisState.value = LabelAnalysisState.Error(err.message ?: "Ошибка распознавания состава")
+                }
+        }
+    }
+
+    /**
+     * Пользователь подтвердил данные о продукте из анализа этикетки.
+     */
+    fun confirmHouseholdProduct(
+        name: String,
+        brand: String,
+        category: ProductCategory,
+        result: com.allergia.data.models.LabelRecognitionResult,
+        labelPhotoPath: String? = null
+    ) {
+        viewModelScope.launch {
+            val date = _selectedDate.value
+            repository.getOrCreateEntry(date)
+            repository.insertProduct(
+                HouseholdProduct(
+                    entryDate = date,
+                    name = name.trim(),
+                    brand = brand.trim(),
+                    category = category,
+                    ingredients = result.ingredients.joinToString(", "),
+                    allergenicIngredients = result.allergenicIngredients
+                        .filter { it.riskLevel == "high" || it.riskLevel == "medium" }
+                        .joinToString(", ") { it.name },
+                    allergenicityScore = result.allergenicityScore,
+                    allergenicityLabel = result.allergenicityLabel,
+                    labelPhotoPath = labelPhotoPath,
+                    notes = result.summary
+                )
+            )
+            _toastMessage.emit("Продукт добавлен в дневник")
+            _labelAnalysisState.value = LabelAnalysisState.Idle
+        }
+    }
+
+    /** Добавить продукт вручную без анализа фото */
+    fun addHouseholdProductManual(name: String, brand: String, category: ProductCategory) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val date = _selectedDate.value
+            repository.getOrCreateEntry(date)
+            repository.insertProduct(HouseholdProduct(entryDate = date, name = name.trim(), brand = brand.trim(), category = category))
+        }
+    }
+
+    fun deleteHouseholdProduct(product: HouseholdProduct) {
+        viewModelScope.launch { repository.deleteProduct(product) }
+    }
+
+    fun dismissLabelAnalysis() { _labelAnalysisState.value = LabelAnalysisState.Idle }
 
     // ─── Food ────────────────────────────────────────────────────────────────
 
@@ -237,6 +311,16 @@ sealed class AllergenicityUiState {
     object Loading : AllergenicityUiState()
     data class Success(val result: ProductAllergenicityResponse) : AllergenicityUiState()
     data class Error(val message: String) : AllergenicityUiState()
+}
+
+sealed class LabelAnalysisState {
+    object Idle : LabelAnalysisState()
+    object Analyzing : LabelAnalysisState()
+    data class Results(
+        val result: com.allergia.data.models.LabelRecognitionResult,
+        val photoUri: android.net.Uri
+    ) : LabelAnalysisState()
+    data class Error(val message: String) : LabelAnalysisState()
 }
 
 sealed class PhotoAnalysisState {

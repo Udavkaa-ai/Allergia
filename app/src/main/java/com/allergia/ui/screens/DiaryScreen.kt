@@ -25,6 +25,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.allergia.data.models.*
 import com.allergia.ui.components.*
 import com.allergia.ui.viewmodels.DiaryViewModel
+import com.allergia.ui.viewmodels.LabelAnalysisState
 import com.allergia.ui.viewmodels.PhotoAnalysisState
 import com.allergia.utils.ImageUtils
 import java.time.format.DateTimeFormatter
@@ -43,49 +44,62 @@ fun DiaryScreen(
     val skinCondition by viewModel.skinCondition.collectAsState()
     val symptoms by viewModel.symptoms.collectAsState()
     val photoState by viewModel.photoAnalysisState.collectAsState()
+    val labelState by viewModel.labelAnalysisState.collectAsState()
+    val householdProducts by viewModel.householdProducts.collectAsState()
 
     val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("ru")))
 
-    // URI для снимка камеры
+    // URI для снимка камеры (еда)
     var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    // Показывать ли bottom-sheet с выбором источника
+    // URI для снимка этикетки (химия/косметика)
+    var labelPhotoUri by remember { mutableStateOf<Uri?>(null) }
+
     var showPhotoSourceSheet by remember { mutableStateOf(false) }
+    var showLabelPhotoSheet by remember { mutableStateOf(false) }
 
-    // Лаунчер камеры
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) cameraPhotoUri?.let { uri -> viewModel.analyzeFoodPhoto(uri) }
+    // Лаунчер камеры (еда)
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) cameraPhotoUri?.let { viewModel.analyzeFoodPhoto(it) }
     }
-
-    // Лаунчер галереи
-    val galleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
+    // Лаунчер галереи (еда)
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.analyzeFoodPhoto(it) }
     }
 
-    // Запрос разрешения на камеру
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
+    // Лаунчер камеры (этикетка)
+    val labelCameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) labelPhotoUri?.let { viewModel.analyzeLabelPhoto(it) }
+    }
+    // Лаунчер галереи (этикетка)
+    val labelGalleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { labelPhotoUri = it; viewModel.analyzeLabelPhoto(it) }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        // re-triggered per action below; just a guard
+    }
+
+    fun launchFoodCamera() {
+        val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasPerm) {
             val file = ImageUtils.createTempPhotoFile(context)
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             cameraPhotoUri = uri
             cameraLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    fun launchCamera() {
-        when {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> {
-                val file = ImageUtils.createTempPhotoFile(context)
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                cameraPhotoUri = uri
-                cameraLauncher.launch(uri)
-            }
-            else -> cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    fun launchLabelCamera() {
+        val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasPerm) {
+            val file = ImageUtils.createTempPhotoFile(context)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            labelPhotoUri = uri
+            labelCameraLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -122,13 +136,44 @@ fun DiaryScreen(
         else -> {}
     }
 
-    // Photo source chooser bottom sheet
+    // Label analysis dialogs
+    when (val ls = labelState) {
+        is LabelAnalysisState.Analyzing -> LabelAnalyzingDialog()
+        is LabelAnalysisState.Results -> LabelResultDialog(
+            result = ls.result,
+            photoUri = ls.photoUri,
+            onConfirm = { name, brand, category ->
+                viewModel.confirmHouseholdProduct(name, brand, category, ls.result, ls.photoUri.toString())
+            },
+            onDismiss = viewModel::dismissLabelAnalysis
+        )
+        is LabelAnalysisState.Error -> AlertDialog(
+            onDismissRequest = viewModel::dismissLabelAnalysis,
+            title = { Text("Ошибка распознавания") },
+            text = { Text(ls.message) },
+            confirmButton = { TextButton(onClick = viewModel::dismissLabelAnalysis) { Text("OK") } }
+        )
+        else -> {}
+    }
+
+    // Food photo source sheet
     if (showPhotoSourceSheet) {
         ModalBottomSheet(onDismissRequest = { showPhotoSourceSheet = false }) {
             PhotoSourceSheet(
-                onCamera = { launchCamera() },
+                onCamera = { launchFoodCamera() },
                 onGallery = { galleryLauncher.launch("image/*") },
                 onDismiss = { showPhotoSourceSheet = false }
+            )
+        }
+    }
+
+    // Label photo source sheet
+    if (showLabelPhotoSheet) {
+        ModalBottomSheet(onDismissRequest = { showLabelPhotoSheet = false }) {
+            LabelPhotoSourceSheet(
+                onCamera = { launchLabelCamera() },
+                onGallery = { labelGalleryLauncher.launch("image/*") },
+                onDismiss = { showLabelPhotoSheet = false }
             )
         }
     }
@@ -202,6 +247,13 @@ fun DiaryScreen(
                 items = medications,
                 onAdd = { name, dose, isAnti -> viewModel.addMedication(name, dose, isAnti) },
                 onDelete = viewModel::deleteMedication
+            )
+
+            HouseholdProductsSection(
+                items = householdProducts,
+                onAddManual = { name, brand, cat -> viewModel.addHouseholdProductManual(name, brand, cat) },
+                onDelete = viewModel::deleteHouseholdProduct,
+                onScanLabel = { showLabelPhotoSheet = true }
             )
 
             SkinConditionSection(
@@ -333,6 +385,152 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
             }
         },
         confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType) }, enabled = name.isNotBlank()) { Text("Добавить") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
+}
+
+// ─── Household Products Section ───────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HouseholdProductsSection(
+    items: List<HouseholdProduct>,
+    onAddManual: (String, String, ProductCategory) -> Unit,
+    onDelete: (HouseholdProduct) -> Unit,
+    onScanLabel: () -> Unit
+) {
+    var showManualDialog by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "🧴 Химия и косметика",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                // Scan label button
+                FilledTonalIconButton(onClick = onScanLabel, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.DocumentScanner, "Сканировать состав", modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(4.dp))
+                FilledTonalIconButton(onClick = { showManualDialog = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Add, "Добавить вручную", modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Гель для посуды, шампунь, крем, зубная паста...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            Spacer(Modifier.height(8.dp))
+
+            if (items.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "📷 Сканируйте этикетку или добавьте вручную",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                }
+            } else {
+                val grouped = items.groupBy { it.category }
+                grouped.forEach { (cat, group) ->
+                    Text(
+                        "${cat.emoji} ${cat.displayName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    group.forEach { product ->
+                        HouseholdProductRow(product = product, onDelete = { onDelete(product) })
+                    }
+                }
+            }
+        }
+    }
+
+    if (showManualDialog) {
+        AddHouseholdProductDialog(
+            onDismiss = { showManualDialog = false },
+            onConfirm = { name, brand, cat -> onAddManual(name, brand, cat); showManualDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun HouseholdProductRow(product: HouseholdProduct, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(product.name, style = MaterialTheme.typography.bodyMedium)
+                if (product.brand.isNotBlank()) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(product.brand, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                }
+            }
+            if (product.allergenicIngredients.isNotBlank()) {
+                Text("⚠ ${product.allergenicIngredients}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE53935))
+            }
+        }
+        product.allergenicityScore?.let { score ->
+            AllergenicityBadge(score, Modifier.padding(end = 4.dp))
+        }
+        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddHouseholdProductDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, ProductCategory) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var brand by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(ProductCategory.OTHER) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Добавить продукт") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Бренд") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = it }) {
+                    OutlinedTextField(
+                        value = "${category.emoji} ${category.displayName}",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Категория") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
+                        ProductCategory.entries.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text("${cat.emoji} ${cat.displayName}") },
+                                onClick = { category = cat; categoryExpanded = false }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, brand, category) }, enabled = name.isNotBlank()) { Text("Добавить") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
 }

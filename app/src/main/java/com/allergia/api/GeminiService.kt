@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.allergia.data.models.*
 import com.allergia.data.repository.DiaryRangeData
+import com.allergia.data.models.HouseholdProduct
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -32,20 +33,23 @@ class GeminiService @Inject constructor(
     // ─── System prompt ─────────────────────────────────────────────────────────
 
     private val allergySystemPrompt = """
-Ты — специализированный ИИ-помощник по аллергологии и диетологии.
-Твоя задача — анализировать дневник питания и симптомов пациента для выявления возможных аллергенов и паттернов аллергических реакций.
+Ты — специализированный ИИ-помощник по аллергологии, дерматологии и токсикологии косметики.
+Твоя задача — анализировать дневник пациента для выявления аллергенов и паттернов реакций.
 
 ПРИНЦИПЫ АНАЛИЗА:
-1. Применяй причинно-следственный подход: ищи корреляции между едой/медикаментами и симптомами с задержкой 0–48 часов.
-2. Учитывай перекрёстную реактивность аллергенов (например, берёза → яблоки, орехи).
-3. Оценивай накопительный эффект: повторное воздействие аллергена может усиливать реакцию.
-4. Разграничивай IgE-опосредованную аллергию и пищевую непереносимость.
-5. Принимай во внимание антигистаминные препараты — они могут маскировать симптомы.
-6. Всегда указывай ВЕРОЯТНОСТЬ в процентах для каждого подозреваемого триггера.
-7. Рекомендуй элиминационные диеты как метод подтверждения.
-8. Подчёркивай необходимость консультации аллерголога для официальной диагностики.
+1. Причинно-следственный подход: ищи корреляции между едой/медикаментами/химией и симптомами с задержкой 0–72 часов.
+2. Учитывай перекрёстную реактивность (берёза → яблоки, латекс → авокадо/банан/киви).
+3. Оценивай накопительный эффект: повторное воздействие усиливает реакцию.
+4. Разграничивай IgE-аллергию, контактный дерматит, пищевую непереносимость.
+5. Антигистаминные препараты могут маскировать симптомы — учитывай это.
+6. КОСМЕТИКА И ХИМИЯ: контактный дерматит может проявляться через 24–72ч после первого контакта.
+   Особое внимание: SLS, MI/MCI, парабены, отдушки, формальдегид-доноры.
+7. Учитывай комбинированное воздействие: нанесение нескольких средств одновременно.
+8. Всегда указывай ВЕРОЯТНОСТЬ в % для каждого триггера (еда / лекарства / косметика / химия).
+9. Рекомендуй patch-тест как метод подтверждения для контактных аллергенов.
+10. Подчёркивай необходимость консультации аллерголога-дерматолога.
 
-ФОРМАТ ОТВЕТА: Структурированный JSON + подробное текстовое объяснение на русском языке.
+ФОРМАТ ОТВЕТА: Структурированный JSON на русском языке.
     """.trimIndent()
 
     // ─── Allergy analysis ──────────────────────────────────────────────────────
@@ -64,8 +68,8 @@ $diaryContext
   "summary": "Краткий вывод 2-3 предложения",
   "suspectedTriggers": [
     {
-      "name": "Название продукта/медикамента",
-      "type": "food|medication|environmental",
+      "name": "Название продукта/медикамента/химии",
+      "type": "food|medication|cosmetic|household_chemical|environmental",
       "probability": 0.75,
       "confidenceLabel": "Высокая|Средняя|Низкая",
       "evidence": "Описание доказательств из дневника",
@@ -166,7 +170,8 @@ $diaryContext
         val allDates = (data.foods.map { it.entryDate } +
                 data.medications.map { it.entryDate } +
                 data.skinConditions.map { it.entryDate } +
-                data.symptoms.map { it.entryDate }).toSortedSet()
+                data.symptoms.map { it.entryDate } +
+                data.householdProducts.map { it.entryDate }).toSortedSet()
 
         allDates.forEach { date ->
             sb.appendLine("═══ ${date.format(dateFormatter)} ═══")
@@ -212,6 +217,23 @@ $diaryContext
                 sb.appendLine("🤧 Симптомы:")
                 symptoms.forEach { s ->
                     sb.appendLine("  • ${s.symptomType.displayName}: ${s.severity}/3")
+                }
+            }
+
+            // Household products & cosmetics — ключевые для контактного дерматита
+            val products = data.householdProducts.filter { it.entryDate == date }
+            if (products.isNotEmpty()) {
+                sb.appendLine("🧴 Химия и косметика:")
+                products.groupBy { it.category }.forEach { (cat, group) ->
+                    sb.append("  ${cat.emoji} ${cat.displayName}: ")
+                    sb.appendLine(group.joinToString(", ") { p ->
+                        buildString {
+                            append(p.name)
+                            if (p.brand.isNotBlank()) append(" (${p.brand})")
+                            if (p.allergenicityScore != null) append(" [аллергенность: ${(p.allergenicityScore * 100).toInt()}%]")
+                            if (p.allergenicIngredients.isNotBlank()) append(" [⚠ ${p.allergenicIngredients}]")
+                        }
+                    })
                 }
             }
 
