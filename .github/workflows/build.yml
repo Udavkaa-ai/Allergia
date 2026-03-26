@@ -29,7 +29,7 @@ jobs:
 
       - name: Write local.properties with API key
         run: |
-          echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> gradle.properties
+          echo "OPENROUTER_API_KEY=${{ secrets.AI_API_KEY }}" >> gradle.properties
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
