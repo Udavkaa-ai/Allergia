@@ -37,12 +37,13 @@ fun SeverityRow(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Label — fixed width
+        // Label — fixed width, allow 2 lines for long symptom names
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(110.dp),
-            maxLines = 1
+            modifier = Modifier.width(120.dp),
+            maxLines = 2,
+            lineHeight = 16.sp
         )
 
         // 4 coloured dots

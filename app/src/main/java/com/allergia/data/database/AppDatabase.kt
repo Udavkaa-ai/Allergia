@@ -13,9 +13,10 @@ import com.allergia.data.models.*
         SkinCondition::class,
         AllergySymptom::class,
         AnalysisResult::class,
-        HouseholdProduct::class
+        HouseholdProduct::class,
+        VapeSession::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

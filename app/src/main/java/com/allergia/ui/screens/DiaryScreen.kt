@@ -27,6 +27,7 @@ import com.allergia.ui.components.*
 import com.allergia.ui.viewmodels.DiaryViewModel
 import com.allergia.ui.viewmodels.LabelAnalysisState
 import com.allergia.ui.viewmodels.PhotoAnalysisState
+import com.allergia.ui.viewmodels.SideEffectsUiState
 import com.allergia.utils.ImageUtils
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -46,6 +47,8 @@ fun DiaryScreen(
     val photoState by viewModel.photoAnalysisState.collectAsState()
     val labelState by viewModel.labelAnalysisState.collectAsState()
     val householdProducts by viewModel.householdProducts.collectAsState()
+    val vapeSessions by viewModel.vapeSessions.collectAsState()
+    val sideEffectsState by viewModel.sideEffectsState.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -164,6 +167,36 @@ fun DiaryScreen(
         else -> {}
     }
 
+    // Side effects dialog
+    when (val se = sideEffectsState) {
+        is SideEffectsUiState.Loading -> {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissSideEffects,
+                title = { Text("Побочные эффекты") },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Запрашиваю данные о «${se.medicationName}»…")
+                    }
+                },
+                confirmButton = { TextButton(onClick = viewModel::dismissSideEffects) { Text("Закрыть") } }
+            )
+        }
+        is SideEffectsUiState.Success -> {
+            MedicationSideEffectsDialog(result = se.result, onDismiss = viewModel::dismissSideEffects)
+        }
+        is SideEffectsUiState.Error -> {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissSideEffects,
+                title = { Text("Ошибка") },
+                text = { Text(se.message) },
+                confirmButton = { TextButton(onClick = viewModel::dismissSideEffects) { Text("OK") } }
+            )
+        }
+        else -> {}
+    }
+
     // Food photo source sheet
     if (showPhotoSourceSheet) {
         ModalBottomSheet(onDismissRequest = { showPhotoSourceSheet = false }) {
@@ -255,7 +288,8 @@ fun DiaryScreen(
             MedicationsSection(
                 items = medications,
                 onAdd = { name, dose, isAnti -> viewModel.addMedication(name, dose, isAnti) },
-                onDelete = viewModel::deleteMedication
+                onDelete = viewModel::deleteMedication,
+                onSideEffects = { name, dose -> viewModel.checkMedicationSideEffects(name, dose) }
             )
 
             HouseholdProductsSection(
@@ -263,6 +297,12 @@ fun DiaryScreen(
                 onAddManual = { name, brand, cat -> viewModel.addHouseholdProductManual(name, brand, cat) },
                 onDelete = viewModel::deleteHouseholdProduct,
                 onScanLabel = { showLabelPhotoSheet = true }
+            )
+
+            VapeSection(
+                sessions = vapeSessions,
+                onAdd = { brand, flavor, nic, pgvg, notes -> viewModel.addVapeSession(brand, flavor, nic, pgvg, notes) },
+                onDelete = viewModel::deleteVapeSession
             )
 
             SkinConditionSection(
@@ -547,7 +587,12 @@ private fun AddHouseholdProductDialog(
 // ─── Medications Section ──────────────────────────────────────────────────────
 
 @Composable
-private fun MedicationsSection(items: List<Medication>, onAdd: (String, String, Boolean) -> Unit, onDelete: (Medication) -> Unit) {
+private fun MedicationsSection(
+    items: List<Medication>,
+    onAdd: (String, String, Boolean) -> Unit,
+    onDelete: (Medication) -> Unit,
+    onSideEffects: (String, String) -> Unit
+) {
     var showDialog by remember { mutableStateOf(false) }
 
     SectionCard(title = "💊 Медикаменты", onAdd = { showDialog = true }) {
@@ -560,6 +605,9 @@ private fun MedicationsSection(items: List<Medication>, onAdd: (String, String, 
                         Text(med.name, style = MaterialTheme.typography.bodyMedium)
                         if (med.dose.isNotBlank()) Text(med.dose, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                         if (med.isAntihistamine) Text("Антигистаминный", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2196F3))
+                    }
+                    IconButton(onClick = { onSideEffects(med.name, med.dose) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Info, "Побочные эффекты", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                     }
                     IconButton(onClick = { onDelete(med) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) }
                 }
@@ -678,4 +726,115 @@ private fun SectionCard(title: String, onAdd: () -> Unit, content: @Composable C
 @Composable
 private fun EmptyHint(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), modifier = Modifier.padding(vertical = 8.dp))
+}
+
+// ─── Vape Section ─────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VapeSection(
+    sessions: List<VapeSession>,
+    onAdd: (String, String, String, String, String) -> Unit,
+    onDelete: (VapeSession) -> Unit
+) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    SectionCard(title = "💨 Вейп", onAdd = { showDialog = true }) {
+        if (sessions.isEmpty()) {
+            EmptyHint("Добавьте информацию о вейпе")
+        } else {
+            sessions.forEach { s ->
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        val title = listOfNotNull(
+                            s.brand.takeIf { it.isNotBlank() },
+                            s.flavor.takeIf { it.isNotBlank() }
+                        ).joinToString(" — ").ifBlank { "Вейп" }
+                        Text(title, style = MaterialTheme.typography.bodyMedium)
+                        val details = listOfNotNull(
+                            s.nicotineLevel.takeIf { it.isNotBlank() }?.let { "Ник: $it" },
+                            s.pgVgRatio.takeIf { it.isNotBlank() }?.let { "PG/VG: $it" }
+                        ).joinToString(" · ")
+                        if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        if (s.notes.isNotBlank()) Text(s.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                    }
+                    IconButton(onClick = { onDelete(s) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) }
+                }
+            }
+        }
+    }
+
+    if (showDialog) {
+        var brand by remember { mutableStateOf("") }
+        var flavor by remember { mutableStateOf("") }
+        var nicotineLevel by remember { mutableStateOf("") }
+        var pgVgRatio by remember { mutableStateOf("") }
+        var notes by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Добавить запись о вейпе") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Бренд/Устройство") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = flavor, onValueChange = { flavor = it }, label = { Text("Вкус жидкости") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = nicotineLevel, onValueChange = { nicotineLevel = it }, label = { Text("Никотин (например, 6 мг)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = pgVgRatio, onValueChange = { pgVgRatio = it }, label = { Text("PG/VG соотношение") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Заметки") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onAdd(brand, flavor, nicotineLevel, pgVgRatio, notes); showDialog = false }) { Text("Добавить") }
+            },
+            dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Отмена") } }
+        )
+    }
+}
+
+// ─── Medication Side Effects Dialog ───────────────────────────────────────────
+
+@Composable
+private fun MedicationSideEffectsDialog(
+    result: com.allergia.api.MedicationSideEffectsResponse,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Побочные эффекты: ${result.medicationName}") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (result.allergyRelated.isNotEmpty()) {
+                    Text("Аллергические реакции", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    result.allergyRelated.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                }
+                if (result.skinReactions.isNotEmpty()) {
+                    Text("Кожные реакции", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    result.skinReactions.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                }
+                if (result.commonSideEffects.isNotEmpty()) {
+                    Text("Частые побочные эффекты", style = MaterialTheme.typography.labelMedium)
+                    result.commonSideEffects.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                }
+                if (result.crossReactivity.isNotEmpty()) {
+                    Text("Перекрёстная реактивность", style = MaterialTheme.typography.labelMedium)
+                    result.crossReactivity.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                }
+                if (result.importantWarnings.isNotEmpty()) {
+                    result.importantWarnings.forEach {
+                        Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                if (result.allergenicPotential.isNotBlank()) {
+                    Text("Аллергенный потенциал: ${result.allergenicPotential}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+                if (result.recommendation.isNotBlank()) {
+                    HorizontalDivider()
+                    Text(result.recommendation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }

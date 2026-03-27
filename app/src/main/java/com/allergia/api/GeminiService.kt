@@ -44,6 +44,7 @@ class GeminiService @Inject constructor(
 8. Всегда указывай ВЕРОЯТНОСТЬ в % для каждого триггера (еда / лекарства / косметика / химия).
 9. Рекомендуй patch-тест как метод подтверждения для контактных аллергенов.
 10. Подчёркивай необходимость консультации аллерголога-дерматолога.
+11. ВЕЙП: никотин, пропиленгликоль (PG), ароматизаторы жидкостей (диацетил, ванилин) могут вызывать раздражение дыхательных путей, контактный дерматит, бронхоспазм. VG (вегетарианский глицерин) обычно безопасен.
 
 ФОРМАТ ОТВЕТА: Структурированный JSON на русском языке.
     """.trimIndent()
@@ -157,6 +158,52 @@ $diaryContext
         }
     }
 
+    // ─── Medication side effects ───────────────────────────────────────────────
+
+    suspend fun getMedicationSideEffects(name: String, dose: String): Result<MedicationSideEffectsResponse> {
+        return runCatching {
+            val doseInfo = if (dose.isNotBlank()) ", доза: $dose" else ""
+            val prompt = """
+Препарат: "$name"$doseInfo
+
+Опиши побочные эффекты этого препарата с точки зрения аллергологии.
+Ответь строго в JSON (без markdown):
+{
+  "medicationName": "$name",
+  "commonSideEffects": ["частый побочный эффект 1", "частый побочный эффект 2"],
+  "allergyRelated": ["аллергическая реакция 1", "аллергическая реакция 2"],
+  "skinReactions": ["кожная реакция 1"],
+  "allergenicPotential": "высокий|средний|низкий",
+  "crossReactivity": ["перекрёстно-реактивный препарат 1"],
+  "importantWarnings": ["важное предупреждение"],
+  "recommendation": "Краткая рекомендация аллергологу (1-2 предложения)"
+}
+
+Используй данные из инструкции к препарату и актуальные клинические данные.
+Если препарат неизвестен, укажи это в recommendation.
+            """.trimIndent()
+
+            val response = api.chatCompletion(
+                authorization = authHeader(),
+                request = OpenRouterRequest(
+                    messages = listOf(
+                        ChatMessage("system", allergySystemPrompt),
+                        ChatMessage("user", prompt)
+                    ),
+                    temperature = 0.1,
+                    maxTokens = 1024
+                )
+            )
+
+            if (response.error != null) throw Exception("API Error: ${response.error.message}")
+
+            val content = response.choices.firstOrNull()?.message?.content
+                ?: throw Exception("Empty response")
+
+            gson.fromJson(cleanJson(content), MedicationSideEffectsResponse::class.java)
+        }
+    }
+
     // ─── Helpers ───────────────────────────────────────────────────────────────
 
     private fun buildDiaryContext(data: DiaryRangeData): String {
@@ -167,7 +214,8 @@ $diaryContext
                 data.medications.map { it.entryDate } +
                 data.skinConditions.map { it.entryDate } +
                 data.symptoms.map { it.entryDate } +
-                data.householdProducts.map { it.entryDate }).toSortedSet()
+                data.householdProducts.map { it.entryDate } +
+                data.vapeSessions.map { it.entryDate }).toSortedSet()
 
         allDates.forEach { date ->
             sb.appendLine("═══ ${date.format(dateFormatter)} ═══")
@@ -233,6 +281,19 @@ $diaryContext
                 }
             }
 
+            val vapes = data.vapeSessions.filter { it.entryDate == date }
+            if (vapes.isNotEmpty()) {
+                sb.appendLine("💨 Вейп:")
+                vapes.forEach { v ->
+                    sb.append("  •")
+                    if (v.brand.isNotBlank()) sb.append(" ${v.brand}")
+                    if (v.flavor.isNotBlank()) sb.append(", вкус: ${v.flavor}")
+                    if (v.nicotineLevel.isNotBlank()) sb.append(", ник: ${v.nicotineLevel}")
+                    if (v.pgVgRatio.isNotBlank()) sb.append(", PG/VG: ${v.pgVgRatio}")
+                    sb.appendLine()
+                }
+            }
+
             sb.appendLine()
         }
 
@@ -288,4 +349,15 @@ data class ProductAllergenicityResponse(
     val safeAlternatives: List<String> = emptyList(),
     val description: String = "",
     val sources: String = ""
+)
+
+data class MedicationSideEffectsResponse(
+    val medicationName: String = "",
+    val commonSideEffects: List<String> = emptyList(),
+    val allergyRelated: List<String> = emptyList(),
+    val skinReactions: List<String> = emptyList(),
+    val allergenicPotential: String = "неизвестен",
+    val crossReactivity: List<String> = emptyList(),
+    val importantWarnings: List<String> = emptyList(),
+    val recommendation: String = ""
 )

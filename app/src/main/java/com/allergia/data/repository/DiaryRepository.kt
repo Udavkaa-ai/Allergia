@@ -61,6 +61,11 @@ class DiaryRepository @Inject constructor(
     suspend fun saveAnalysis(result: AnalysisResult): Long = dao.insertAnalysis(result)
     suspend fun getLatestAnalysis(): AnalysisResult? = dao.getLatestAnalysis()
 
+    // Vape Sessions
+    fun getVapeSessionsForDate(date: LocalDate): Flow<List<VapeSession>> = dao.getVapeSessionsForDate(date)
+    suspend fun insertVapeSession(session: VapeSession): Long = dao.insertVapeSession(session)
+    suspend fun deleteVapeSession(session: VapeSession) = dao.deleteVapeSession(session)
+
     // ── Backup / Restore ──────────────────────────────────────────────────────
 
     suspend fun getFullBackup(): BackupData = BackupData(
@@ -70,7 +75,8 @@ class DiaryRepository @Inject constructor(
         skinConditions     = dao.getAllSkinConditionsList(),
         symptoms           = dao.getAllSymptomsList(),
         householdProducts  = dao.getAllHouseholdProductsList(),
-        analysisResults    = dao.getAllAnalysisResultsList()
+        analysisResults    = dao.getAllAnalysisResultsList(),
+        vapeSessions       = dao.getAllVapeSessionsList()
     )
 
     suspend fun restoreFromBackup(data: BackupData) {
@@ -81,6 +87,7 @@ class DiaryRepository @Inject constructor(
         dao.clearSkinConditions()
         dao.clearMedications()
         dao.clearFoodItems()
+        dao.clearVapeSessions()
         dao.clearDiaryEntries()
 
         // Restore parent first, then children
@@ -91,6 +98,7 @@ class DiaryRepository @Inject constructor(
         dao.insertAllSymptoms(data.symptoms)
         dao.insertAllHouseholdProducts(data.householdProducts)
         dao.insertAllAnalysisResults(data.analysisResults)
+        dao.insertAllVapeSessions(data.vapeSessions)
     }
 
     // Data for AI context (now includes household products)
@@ -101,6 +109,7 @@ class DiaryRepository @Inject constructor(
             skinConditions = dao.getSkinConditionsInRange(from, to),
             symptoms = dao.getSymptomsInRange(from, to),
             householdProducts = dao.getProductsInRange(from, to),
+            vapeSessions = dao.getVapeSessionsInRange(from, to),
             periodStart = from,
             periodEnd = to
         )
@@ -113,6 +122,7 @@ data class DiaryRangeData(
     val skinConditions: List<SkinCondition>,
     val symptoms: List<AllergySymptom>,
     val householdProducts: List<HouseholdProduct>,
+    val vapeSessions: List<VapeSession> = emptyList(),
     val periodStart: LocalDate,
     val periodEnd: LocalDate
 )

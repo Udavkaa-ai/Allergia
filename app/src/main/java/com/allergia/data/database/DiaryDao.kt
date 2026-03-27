@@ -117,6 +117,19 @@ interface DiaryDao {
     @Query("SELECT * FROM analysis_results ORDER BY analyzedAt DESC LIMIT 1")
     suspend fun getLatestAnalysis(): AnalysisResult?
 
+    // VapeSession
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVapeSession(session: com.allergia.data.models.VapeSession): Long
+
+    @Delete
+    suspend fun deleteVapeSession(session: com.allergia.data.models.VapeSession)
+
+    @Query("SELECT * FROM vape_sessions WHERE entryDate = :date ORDER BY id")
+    fun getVapeSessionsForDate(date: LocalDate): Flow<List<com.allergia.data.models.VapeSession>>
+
+    @Query("SELECT * FROM vape_sessions WHERE entryDate BETWEEN :from AND :to ORDER BY entryDate, id")
+    suspend fun getVapeSessionsInRange(from: LocalDate, to: LocalDate): List<com.allergia.data.models.VapeSession>
+
     // ── Backup: full-table reads ──────────────────────────────────────────────
 
     @Query("SELECT * FROM diary_entries ORDER BY date")
@@ -139,6 +152,9 @@ interface DiaryDao {
 
     @Query("SELECT * FROM analysis_results ORDER BY analyzedAt")
     suspend fun getAllAnalysisResultsList(): List<AnalysisResult>
+
+    @Query("SELECT * FROM vape_sessions ORDER BY entryDate, id")
+    suspend fun getAllVapeSessionsList(): List<com.allergia.data.models.VapeSession>
 
     // ── Backup: batch inserts for restore ────────────────────────────────────
 
@@ -163,6 +179,9 @@ interface DiaryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllAnalysisResults(results: List<AnalysisResult>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllVapeSessions(sessions: List<com.allergia.data.models.VapeSession>)
+
     // ── Backup: table clears for full restore ────────────────────────────────
 
     @Query("DELETE FROM food_items")         suspend fun clearFoodItems()
@@ -171,5 +190,6 @@ interface DiaryDao {
     @Query("DELETE FROM allergy_symptoms")   suspend fun clearSymptoms()
     @Query("DELETE FROM household_products") suspend fun clearHouseholdProducts()
     @Query("DELETE FROM analysis_results")   suspend fun clearAnalysisResults()
+    @Query("DELETE FROM vape_sessions")      suspend fun clearVapeSessions()
     @Query("DELETE FROM diary_entries")      suspend fun clearDiaryEntries()
 }

@@ -8,6 +8,7 @@ import com.allergia.api.FoodPhotoService
 import com.allergia.api.FoodRecognitionResult
 import com.allergia.api.GeminiService
 import com.allergia.api.LabelPhotoService
+import com.allergia.api.MedicationSideEffectsResponse
 import com.allergia.api.ProductAllergenicityResponse
 import com.allergia.data.models.*
 import com.allergia.data.repository.DiaryRepository
@@ -56,6 +57,10 @@ class DiaryViewModel @Inject constructor(
         .flatMapLatest { repository.getProductsForDate(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val vapeSessions: StateFlow<List<VapeSession>> = _selectedDate
+        .flatMapLatest { repository.getVapeSessionsForDate(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _photoAnalysisState = MutableStateFlow<PhotoAnalysisState>(PhotoAnalysisState.Idle)
     val photoAnalysisState: StateFlow<PhotoAnalysisState> = _photoAnalysisState.asStateFlow()
 
@@ -64,6 +69,9 @@ class DiaryViewModel @Inject constructor(
 
     private val _toastMessage = MutableSharedFlow<String>()
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
+
+    private val _sideEffectsState = MutableStateFlow<SideEffectsUiState>(SideEffectsUiState.Idle)
+    val sideEffectsState: StateFlow<SideEffectsUiState> = _sideEffectsState.asStateFlow()
 
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
@@ -253,6 +261,40 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch { repository.deleteMedication(med) }
     }
 
+    fun checkMedicationSideEffects(name: String, dose: String) {
+        _sideEffectsState.value = SideEffectsUiState.Loading(name)
+        viewModelScope.launch {
+            geminiService.getMedicationSideEffects(name, dose)
+                .onSuccess { _sideEffectsState.value = SideEffectsUiState.Success(it) }
+                .onFailure { _sideEffectsState.value = SideEffectsUiState.Error(it.message ?: "Ошибка") }
+        }
+    }
+
+    fun dismissSideEffects() { _sideEffectsState.value = SideEffectsUiState.Idle }
+
+    // ─── Vape ─────────────────────────────────────────────────────────────────
+
+    fun addVapeSession(brand: String, flavor: String, nicotineLevel: String, pgVgRatio: String, notes: String) {
+        viewModelScope.launch {
+            val date = _selectedDate.value
+            repository.getOrCreateEntry(date)
+            repository.insertVapeSession(
+                VapeSession(
+                    entryDate = date,
+                    brand = brand.trim(),
+                    flavor = flavor.trim(),
+                    nicotineLevel = nicotineLevel.trim(),
+                    pgVgRatio = pgVgRatio.trim(),
+                    notes = notes.trim()
+                )
+            )
+        }
+    }
+
+    fun deleteVapeSession(session: VapeSession) {
+        viewModelScope.launch { repository.deleteVapeSession(session) }
+    }
+
     // ─── Skin Condition ───────────────────────────────────────────────────────
 
     fun saveSkinCondition(
@@ -332,4 +374,11 @@ sealed class PhotoAnalysisState {
         val editableItems: MutableList<DetectedFoodItem>
     ) : PhotoAnalysisState()
     data class Error(val message: String) : PhotoAnalysisState()
+}
+
+sealed class SideEffectsUiState {
+    object Idle : SideEffectsUiState()
+    data class Loading(val medicationName: String) : SideEffectsUiState()
+    data class Success(val result: MedicationSideEffectsResponse) : SideEffectsUiState()
+    data class Error(val message: String) : SideEffectsUiState()
 }
