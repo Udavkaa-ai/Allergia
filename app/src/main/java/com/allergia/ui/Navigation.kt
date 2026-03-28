@@ -15,6 +15,7 @@ sealed class Screen(val route: String) {
     object Analysis : Screen("analysis")
     object ProductSearch : Screen("product_search")
     object Settings : Screen("settings")
+    object PhotoArchive : Screen("photo_archive")
 }
 
 @Composable
@@ -65,7 +66,13 @@ fun AllergiaNavigation() {
                 )
             }
             composable(Screen.Diary.route) {
-                DiaryScreen(onBack = { navController.popBackStack() })
+                DiaryScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigateToArchive = { navController.navigate(Screen.PhotoArchive.route) }
+                )
+            }
+            composable(Screen.PhotoArchive.route) {
+                PhotoArchiveScreen(onBack = { navController.popBackStack() })
             }
             composable(Screen.Analysis.route) {
                 AnalysisScreen(onBack = { navController.popBackStack() })

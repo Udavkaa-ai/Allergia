@@ -16,9 +16,9 @@ import java.util.Locale
 
 object ImageUtils {
 
-    private const val MAX_DIMENSION = 800     // px — достаточно для распознавания
-    private const val JPEG_QUALITY   = 72     // % — баланс качество/размер
-    private const val MAX_BASE64_MB  = 3.5    // OpenRouter free tier limit
+    private const val MAX_DIMENSION = 1280    // px — ~720p, баланс качество/размер архива
+    private const val JPEG_QUALITY   = 80     // % — выше для архивных снимков
+    private const val MAX_BASE64_MB  = 3.5    // OpenRouter limit
 
     /** Создаёт временный файл для снимка камеры */
     fun createTempPhotoFile(context: Context): File {
@@ -78,6 +78,29 @@ object ImageUtils {
 
         rotated.recycle()
         return Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
+    }
+
+    /**
+     * Deletes food photos older than [keepDays] days from the photos directory.
+     * Call this after saving a new photo to keep storage usage bounded.
+     */
+    fun pruneOldPhotos(context: Context, keepDays: Int = 7) {
+        val dir = File(context.filesDir, "food_photos")
+        if (!dir.exists()) return
+        val cutoff = System.currentTimeMillis() - keepDays * 24L * 60 * 60 * 1000
+        dir.listFiles()
+            ?.filter { it.isFile && it.lastModified() < cutoff }
+            ?.forEach { it.delete() }
+    }
+
+    /** Returns all saved food photo files sorted newest-first. */
+    fun listFoodPhotos(context: Context): List<File> {
+        val dir = File(context.filesDir, "food_photos")
+        if (!dir.exists()) return emptyList()
+        return dir.listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".jpg") }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────

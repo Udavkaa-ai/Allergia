@@ -22,10 +22,6 @@ class FoodPhotoService @Inject constructor(
 ) {
     private val gson = Gson()
 
-    companion object {
-        private const val VISION_MODEL = "google/gemma-3-4b-it:free"
-    }
-
     private suspend fun authHeader(): String {
         val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first()
         if (key.isBlank()) throw Exception("API ключ не настроен. Перейдите в Настройки.")
@@ -33,15 +29,21 @@ class FoodPhotoService @Inject constructor(
     }
 
     /**
-     * Анализирует фото еды и возвращает список распознанных блюд/продуктов.
-     * [imageUri] — URI камеры или галереи.
-     * [savedFile] — если изображение уже сжато и сохранено, передаётся путь.
+     * Анализирует фото еды:
+     * 1. Сжимает и сохраняет снимок в 720p в приватное хранилище (архив до 7 дней).
+     * 2. Отправляет изображение в Vision API.
+     * 3. Возвращает распознанные продукты + путь к сохранённому файлу.
      */
     suspend fun recognizeFoodFromPhoto(imageUri: Uri): Result<FoodRecognitionResult> =
         withContext(Dispatchers.IO) {
             runCatching {
-                // Сжать и закодировать в base64
-                val base64 = ImageUtils.uriToBase64(context, imageUri)
+                // 1. Сохранить сжатое фото в архив
+                val savedFile = ImageUtils.compressAndSave(context, imageUri)
+                // Прореживать архив (оставлять только 7 дней)
+                ImageUtils.pruneOldPhotos(context, keepDays = 7)
+
+                // 2. Конвертировать в base64 из сохранённого файла
+                val base64 = ImageUtils.fileToBase64(savedFile)
                 val dataUrl = "data:image/jpeg;base64,$base64"
 
                 val systemPrompt = """
@@ -76,7 +78,7 @@ class FoodPhotoService @Inject constructor(
                 """.trimIndent()
 
                 val request = VisionRequest(
-                    model = VISION_MODEL,
+                    model = Models.FOOD_PHOTO,
                     messages = listOf(
                         VisionMessage(
                             role = "user",
@@ -99,16 +101,23 @@ class FoodPhotoService @Inject constructor(
                     request = request
                 )
 
-                if (response.error != null) throw Exception("API Error: ${response.error.message}")
+                if (response.error != null) {
+                    val msg = response.error.message
+                    throw Exception(
+                        if (msg.contains("429") || response.error.code == "429")
+                            "Превышен лимит запросов к модели. Подождите минуту и попробуйте снова."
+                        else "Ошибка API: $msg"
+                    )
+                }
 
                 val content = response.choices.firstOrNull()?.message?.content
                     ?: throw Exception("Пустой ответ от модели")
 
-                parseFoodResponse(content)
+                parseFoodResponse(content, savedFile.absolutePath)
             }
         }
 
-    private fun parseFoodResponse(raw: String): FoodRecognitionResult {
+    private fun parseFoodResponse(raw: String, savedPhotoPath: String? = null): FoodRecognitionResult {
         val cleaned = raw
             .replace(Regex("```json\\s*"), "")
             .replace(Regex("```\\s*"), "")
@@ -125,13 +134,15 @@ class FoodPhotoService @Inject constructor(
                         isSelected = (item.confidence ?: 1f) >= 0.5f
                     )
                 },
-                rawResponse = raw
+                rawResponse = raw,
+                savedPhotoPath = savedPhotoPath
             )
         }.getOrElse {
             // Fallback: если JSON кривой — парсим текст эвристически
             FoodRecognitionResult(
                 items = extractItemsFallback(raw),
-                rawResponse = raw
+                rawResponse = raw,
+                savedPhotoPath = savedPhotoPath
             )
         }
     }

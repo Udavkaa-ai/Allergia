@@ -36,6 +36,7 @@ import java.util.Locale
 @Composable
 fun DiaryScreen(
     onBack: () -> Unit,
+    onNavigateToArchive: () -> Unit = {},
     viewModel: DiaryViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -67,6 +68,7 @@ fun DiaryScreen(
 
     var showPhotoSourceSheet by remember { mutableStateOf(false) }
     var showLabelPhotoSheet by remember { mutableStateOf(false) }
+    var showCategorySheet by remember { mutableStateOf(false) }
 
     // Лаунчер камеры (еда)
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -197,6 +199,36 @@ fun DiaryScreen(
         else -> {}
     }
 
+    // Category chooser — Food vs Chemistry
+    if (showCategorySheet) {
+        ModalBottomSheet(onDismissRequest = { showCategorySheet = false }) {
+            Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+                Text("Что сфотографировать?", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ElevatedButton(
+                        onClick = { showCategorySheet = false; showPhotoSourceSheet = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🍽", style = MaterialTheme.typography.headlineMedium)
+                            Text("Питание", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    ElevatedButton(
+                        onClick = { showCategorySheet = false; showLabelPhotoSheet = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🧴", style = MaterialTheme.typography.headlineMedium)
+                            Text("Химия / Косметика", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
     // Food photo source sheet
     if (showPhotoSourceSheet) {
         ModalBottomSheet(onDismissRequest = { showPhotoSourceSheet = false }) {
@@ -230,12 +262,7 @@ fun DiaryScreen(
                         Icon(Icons.Default.ArrowBack, "Назад")
                     }
                 },
-                actions = {
-                    // Кнопка фото — главная точка входа
-                    IconButton(onClick = { showPhotoSourceSheet = true }) {
-                        Icon(Icons.Default.CameraAlt, "Сфотографировать еду", tint = Color.White)
-                    }
-                },
+                actions = {},
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = Color.White,
@@ -245,9 +272,9 @@ fun DiaryScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { showPhotoSourceSheet = true },
+                onClick = { showCategorySheet = true },
                 icon = { Icon(Icons.Default.CameraAlt, null) },
-                text = { Text("Сфоткать еду") },
+                text = { Text("Добавить фото") },
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         },
@@ -260,29 +287,12 @@ fun DiaryScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // AI photo tip banner
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.tertiary)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Нажмите 📷 — Gemma 3 автоматически распознает блюда с фото",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
-            }
-
             FoodSection(
                 items = foodItems,
                 onAdd = { name, amount, type -> viewModel.addFoodItem(name, amount, type) },
                 onDelete = viewModel::deleteFoodItem,
-                onPhotoClick = { showPhotoSourceSheet = true }
+                onPhotoClick = { showPhotoSourceSheet = true },
+                onArchiveClick = onNavigateToArchive
             )
 
             MedicationsSection(
@@ -330,7 +340,8 @@ private fun FoodSection(
     items: List<FoodItem>,
     onAdd: (String, String, MealType) -> Unit,
     onDelete: (FoodItem) -> Unit,
-    onPhotoClick: () -> Unit
+    onPhotoClick: () -> Unit,
+    onArchiveClick: () -> Unit = {}
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
@@ -343,6 +354,11 @@ private fun FoodSection(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
+                // Photo archive
+                FilledTonalIconButton(onClick = onArchiveClick, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.PhotoLibrary, "Архив фото", modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(4.dp))
                 // Camera shortcut
                 FilledTonalIconButton(onClick = onPhotoClick, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.CameraAlt, "Фото еды", modifier = Modifier.size(18.dp))

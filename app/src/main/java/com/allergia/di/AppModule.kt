@@ -11,7 +11,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -41,10 +43,26 @@ object AppModule {
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             })
+            .addInterceptor(RateLimitRetryInterceptor())
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
+    }
+
+    /** Retries up to 3 times on HTTP 429 with exponential back-off (2 s, 4 s, 8 s). */
+    private class RateLimitRetryInterceptor : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            var response = chain.proceed(chain.request())
+            var attempt = 0
+            while (response.code == 429 && attempt < 3) {
+                response.close()
+                Thread.sleep(2_000L * (1 shl attempt))   // 2s, 4s, 8s
+                attempt++
+                response = chain.proceed(chain.request())
+            }
+            return response
+        }
     }
 
     @Provides
