@@ -23,8 +23,7 @@ data class VisionContentPart(
 )
 
 data class ImageUrlData(
-    val url: String,                                           // "data:image/jpeg;base64,..."
-    val detail: String = "auto"
+    val url: String                                            // "data:image/jpeg;base64,..."
 )
 
 // Parsed food recognition result

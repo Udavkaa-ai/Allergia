@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -96,10 +97,19 @@ class FoodPhotoService @Inject constructor(
                     maxTokens = 1024
                 )
 
-                val response = api.visionCompletion(
-                    authorization = authHeader(),
-                    request = request
-                )
+                val response = try {
+                    api.visionCompletion(authorization = authHeader(), request = request)
+                } catch (e: HttpException) {
+                    val body = e.response()?.errorBody()?.string() ?: ""
+                    val code = e.code()
+                    throw Exception(
+                        when {
+                            code == 429 -> "Превышен лимит запросов. Подождите минуту и попробуйте снова."
+                            code == 400 -> "Неверный запрос к API (400). $body".trimEnd()
+                            else -> "HTTP $code: $body".trimEnd()
+                        }
+                    )
+                }
 
                 if (response.error != null) {
                     val msg = response.error.message
