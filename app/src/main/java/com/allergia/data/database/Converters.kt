@@ -3,6 +3,7 @@ package com.allergia.data.database
 import androidx.room.TypeConverter
 import com.allergia.data.models.MealType
 import com.allergia.data.models.ProductCategory
+import com.allergia.data.models.ProfileItemType
 import com.allergia.data.models.SymptomType
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -26,4 +27,7 @@ class Converters {
 
     @TypeConverter fun fromProductCategory(value: String?): ProductCategory? = value?.let { ProductCategory.valueOf(it) }
     @TypeConverter fun toProductCategory(cat: ProductCategory?): String? = cat?.name
+
+    @TypeConverter fun fromProfileItemType(value: String?): ProfileItemType? = value?.let { ProfileItemType.valueOf(it) }
+    @TypeConverter fun toProfileItemType(type: ProfileItemType?): String? = type?.name
 }

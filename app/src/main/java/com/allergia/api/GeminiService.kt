@@ -2,6 +2,7 @@ package com.allergia.api
 
 import android.content.Context
 import com.allergia.data.models.*
+import com.allergia.data.models.ProfileItemType
 import com.allergia.data.repository.DiaryRangeData
 import com.allergia.utils.appDataStore
 import com.allergia.utils.PreferenceKeys
@@ -45,6 +46,9 @@ class GeminiService @Inject constructor(
 9. Рекомендуй patch-тест как метод подтверждения для контактных аллергенов.
 10. Подчёркивай необходимость консультации аллерголога-дерматолога.
 11. ВЕЙП: никотин, пропиленгликоль (PG), ароматизаторы жидкостей (диацетил, ванилин) могут вызывать раздражение дыхательных путей, контактный дерматит, бронхоспазм. VG (вегетарианский глицерин) обычно безопасен.
+12. ПРОФИЛЬ ПАЦИЕНТА: если в начале запроса есть раздел «ЛИЧНЫЙ ПРОФИЛЬ АЛЛЕРГИКА» — ОБЯЗАТЕЛЬНО учитывай его:
+    — «✅ Подтверждено НЕ аллергены» — НЕ включай эти вещества в suspectedTriggers, даже если есть корреляция.
+    — «⚠️ Известные аллергены» — упоминай как фоновый фактор, не как новое открытие.
 
 ФОРМАТ ОТВЕТА: Структурированный JSON на русском языке.
     """.trimIndent()
@@ -54,9 +58,10 @@ class GeminiService @Inject constructor(
     suspend fun analyzeAllergyPatterns(data: DiaryRangeData): Result<AllergyAnalysisResponse> {
         return runCatching {
             val diaryContext = buildDiaryContext(data)
+            val profileContext = buildProfileContext(data)
 
             val userPrompt = """
-ДНЕВНИК АЛЛЕРГИКА за период ${data.periodStart.format(dateFormatter)} — ${data.periodEnd.format(dateFormatter)}:
+${if (profileContext.isNotBlank()) "$profileContext\n\n" else ""}ДНЕВНИК АЛЛЕРГИКА за период ${data.periodStart.format(dateFormatter)} — ${data.periodEnd.format(dateFormatter)}:
 
 $diaryContext
 
@@ -205,6 +210,38 @@ $diaryContext
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Builds a profile block prepended to the analysis prompt so the AI knows
+     * which items are excluded (confirmed safe) and which are known allergens.
+     */
+    private fun buildProfileContext(data: DiaryRangeData): String {
+        if (data.profileItems.isEmpty()) return ""
+        val sb = StringBuilder()
+        sb.appendLine("═══ ЛИЧНЫЙ ПРОФИЛЬ АЛЛЕРГИКА ═══")
+
+        val safe = data.profileItems.filter { it.type == ProfileItemType.CONFIRMED_SAFE }
+        val known = data.profileItems.filter { it.type == ProfileItemType.KNOWN_ALLERGEN }
+
+        if (safe.isNotEmpty()) {
+            sb.appendLine("✅ Подтверждено НЕ аллергены (анализами/врачом) — ИСКЛЮЧИ из подозреваемых:")
+            safe.forEach { item ->
+                val testNote = if (item.confirmedByTest) " [подтверждено тестом]" else ""
+                val notesNote = if (item.notes.isNotBlank()) " — ${item.notes}" else ""
+                sb.appendLine("  • ${item.name}$testNote$notesNote")
+            }
+        }
+        if (known.isNotEmpty()) {
+            sb.appendLine("⚠️ Известные аллергены (подтверждены) — учитывай как фоновый фактор:")
+            known.forEach { item ->
+                val testNote = if (item.confirmedByTest) " [подтверждено тестом]" else ""
+                val notesNote = if (item.notes.isNotBlank()) " — ${item.notes}" else ""
+                sb.appendLine("  • ${item.name}$testNote$notesNote")
+            }
+        }
+        sb.appendLine("═══════════════════════════════")
+        return sb.toString().trim()
+    }
 
     private fun buildDiaryContext(data: DiaryRangeData): String {
         val sb = StringBuilder()

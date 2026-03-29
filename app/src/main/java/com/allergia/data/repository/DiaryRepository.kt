@@ -61,6 +61,11 @@ class DiaryRepository @Inject constructor(
     suspend fun saveAnalysis(result: AnalysisResult): Long = dao.insertAnalysis(result)
     suspend fun getLatestAnalysis(): AnalysisResult? = dao.getLatestAnalysis()
 
+    // Allergy Profile
+    fun getAllProfileItems(): Flow<List<ProfileItem>> = dao.getAllProfileItems()
+    suspend fun insertProfileItem(item: ProfileItem): Long = dao.insertProfileItem(item)
+    suspend fun deleteProfileItem(item: ProfileItem) = dao.deleteProfileItem(item)
+
     // Vape Sessions
     fun getVapeSessionsForDate(date: LocalDate): Flow<List<VapeSession>> = dao.getVapeSessionsForDate(date)
     suspend fun insertVapeSession(session: VapeSession): Long = dao.insertVapeSession(session)
@@ -77,11 +82,11 @@ class DiaryRepository @Inject constructor(
         symptoms           = dao.getAllSymptomsList(),
         householdProducts  = dao.getAllHouseholdProductsList(),
         analysisResults    = dao.getAllAnalysisResultsList(),
-        vapeSessions       = dao.getAllVapeSessionsList()
+        vapeSessions       = dao.getAllVapeSessionsList(),
+        profileItems       = dao.getAllProfileItemsList()
     )
 
     suspend fun restoreFromBackup(data: BackupData) {
-        // Order: clear child tables first (FK constraints), then parent
         dao.clearAnalysisResults()
         dao.clearHouseholdProducts()
         dao.clearSymptoms()
@@ -89,9 +94,9 @@ class DiaryRepository @Inject constructor(
         dao.clearMedications()
         dao.clearFoodItems()
         dao.clearVapeSessions()
+        dao.clearProfileItems()
         dao.clearDiaryEntries()
 
-        // Restore parent first, then children
         dao.insertAllEntries(data.diaryEntries)
         dao.insertAllFoodItems(data.foodItems)
         dao.insertAllMedications(data.medications)
@@ -100,6 +105,7 @@ class DiaryRepository @Inject constructor(
         dao.insertAllHouseholdProducts(data.householdProducts)
         dao.insertAllAnalysisResults(data.analysisResults)
         dao.insertAllVapeSessions(data.vapeSessions)
+        data.profileItems.forEach { dao.insertProfileItem(it) }
     }
 
     // Data for AI context (now includes household products)
@@ -111,6 +117,7 @@ class DiaryRepository @Inject constructor(
             symptoms = dao.getSymptomsInRange(from, to),
             householdProducts = dao.getProductsInRange(from, to),
             vapeSessions = dao.getVapeSessionsInRange(from, to),
+            profileItems = dao.getAllProfileItemsList(),
             periodStart = from,
             periodEnd = to
         )
@@ -124,6 +131,7 @@ data class DiaryRangeData(
     val symptoms: List<AllergySymptom>,
     val householdProducts: List<HouseholdProduct>,
     val vapeSessions: List<VapeSession> = emptyList(),
+    val profileItems: List<ProfileItem> = emptyList(),
     val periodStart: LocalDate,
     val periodEnd: LocalDate
 )

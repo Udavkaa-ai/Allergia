@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.allergia.data.models.ProfileItem
+import com.allergia.data.models.ProfileItemType
 import com.allergia.data.repository.DiaryRepository
 import com.allergia.utils.BackupManager
 import com.allergia.utils.PreferenceKeys
@@ -36,6 +38,9 @@ class SettingsViewModel @Inject constructor(
     val userName: StateFlow<String> = context.appDataStore.data
         .map { prefs -> prefs[PreferenceKeys.USER_NAME] ?: "" }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    val profileItems: StateFlow<List<ProfileItem>> = repository.getAllProfileItems()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _backupStatus = MutableStateFlow<BackupStatus>(BackupStatus.Idle)
     val backupStatus: StateFlow<BackupStatus> = _backupStatus.asStateFlow()
@@ -90,6 +95,19 @@ class SettingsViewModel @Inject constructor(
 
     fun clearBackupStatus() {
         _backupStatus.value = BackupStatus.Idle
+    }
+
+    fun addProfileItem(name: String, type: ProfileItemType, confirmedByTest: Boolean, notes: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            repository.insertProfileItem(
+                ProfileItem(name = name.trim(), type = type, confirmedByTest = confirmedByTest, notes = notes.trim())
+            )
+        }
+    }
+
+    fun deleteProfileItem(item: ProfileItem) {
+        viewModelScope.launch { repository.deleteProfileItem(item) }
     }
 }
 

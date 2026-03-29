@@ -18,9 +18,193 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.allergia.data.models.ProfileItem
+import com.allergia.data.models.ProfileItemType
 import com.allergia.ui.viewmodels.BackupStatus
 import com.allergia.ui.viewmodels.SettingsViewModel
 import java.time.LocalDate
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileSection(
+    items: List<ProfileItem>,
+    onAdd: (name: String, type: ProfileItemType, confirmed: Boolean, notes: String) -> Unit,
+    onDelete: (ProfileItem) -> Unit
+) {
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Аллергологический профиль", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${items.size} записей · используется в AI-анализе",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+                IconButton(onClick = { showAddDialog = true }) {
+                    Icon(Icons.Default.Add, "Добавить")
+                }
+            }
+
+            val safeItems = items.filter { it.type == ProfileItemType.CONFIRMED_SAFE }
+            val allergenItems = items.filter { it.type == ProfileItemType.KNOWN_ALLERGEN }
+
+            if (items.isEmpty()) {
+                Text(
+                    "Добавьте данные анализов: на что точно нет аллергии и известные аллергены. AI будет учитывать это при анализе.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
+            }
+
+            if (safeItems.isNotEmpty()) {
+                Text(
+                    "✅ Точно нет аллергии",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                safeItems.forEach { item ->
+                    ProfileItemRow(item = item, onDelete = { onDelete(item) })
+                }
+            }
+
+            if (allergenItems.isNotEmpty()) {
+                Text(
+                    "⚠️ Известные аллергены",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+                allergenItems.forEach { item ->
+                    ProfileItemRow(item = item, onDelete = { onDelete(item) })
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddProfileItemDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, type, confirmed, notes ->
+                onAdd(name, type, confirmed, notes)
+                showAddDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun ProfileItemRow(item: ProfileItem, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(item.name, style = MaterialTheme.typography.bodyMedium)
+            if (item.notes.isNotBlank()) {
+                Text(
+                    item.notes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            if (item.confirmedByTest) {
+                Text(
+                    "подтверждено анализами",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                )
+            }
+        }
+        IconButton(onClick = onDelete) {
+            Icon(
+                Icons.Default.Delete,
+                null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddProfileItemDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, type: ProfileItemType, confirmed: Boolean, notes: String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(ProfileItemType.CONFIRMED_SAFE) }
+    var confirmedByTest by remember { mutableStateOf(true) }
+    var notes by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Добавить запись в профиль") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название (пыль, лактоза, глютен...)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text("Тип:", style = MaterialTheme.typography.labelMedium)
+                ProfileItemType.entries.forEach { type ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        RadioButton(
+                            selected = selectedType == type,
+                            onClick = { selectedType = type }
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("${type.emoji} ${type.displayName}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(
+                        checked = confirmedByTest,
+                        onCheckedChange = { confirmedByTest = it }
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Подтверждено анализами", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Примечание (необязательно)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name.trim(), selectedType, confirmedByTest, notes.trim()) },
+                enabled = name.isNotBlank()
+            ) { Text("Добавить") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        }
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +215,7 @@ fun SettingsScreen(
     val apiKey by viewModel.apiKey.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val backupStatus by viewModel.backupStatus.collectAsState()
+    val profileItems by viewModel.profileItems.collectAsState()
 
     var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var userNameInput by remember(userName) { mutableStateOf(userName) }
@@ -251,6 +436,15 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // ── Allergy Profile ──────────────────────────────────────────────
+            ProfileSection(
+                items = profileItems,
+                onAdd = { name, type, confirmed, notes ->
+                    viewModel.addProfileItem(name, type, confirmed, notes)
+                },
+                onDelete = viewModel::deleteProfileItem
+            )
 
             // ── About ────────────────────────────────────────────────────────
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {

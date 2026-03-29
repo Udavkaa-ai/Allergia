@@ -133,6 +133,22 @@ interface DiaryDao {
     @Query("SELECT * FROM vape_sessions WHERE entryDate BETWEEN :from AND :to ORDER BY entryDate, id")
     suspend fun getVapeSessionsInRange(from: LocalDate, to: LocalDate): List<com.allergia.data.models.VapeSession>
 
+    // ProfileItem
+    @Query("SELECT * FROM profile_items ORDER BY type, name")
+    fun getAllProfileItems(): Flow<List<com.allergia.data.models.ProfileItem>>
+
+    @Query("SELECT * FROM profile_items ORDER BY type, name")
+    suspend fun getAllProfileItemsList(): List<com.allergia.data.models.ProfileItem>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProfileItem(item: com.allergia.data.models.ProfileItem): Long
+
+    @Delete
+    suspend fun deleteProfileItem(item: com.allergia.data.models.ProfileItem)
+
+    @Query("DELETE FROM profile_items")
+    suspend fun clearProfileItems()
+
     // ── Backup: full-table reads ──────────────────────────────────────────────
 
     @Query("SELECT * FROM diary_entries ORDER BY date")
