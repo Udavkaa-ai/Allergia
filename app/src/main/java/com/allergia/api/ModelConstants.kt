@@ -12,12 +12,12 @@ package com.allergia.api
  */
 object Models {
     /** Food photo recognition (vision model) */
-    const val FOOD_PHOTO = "google/gemini-2.0-flash-lite"
+    const val FOOD_PHOTO = "google/gemini-2.5-flash-lite"
 
     /** Allergy dependency analysis + allergenicity search + product scoring */
-    const val ANALYSIS = "google/gemini-2.0-flash-lite"
+    const val ANALYSIS = "google/gemini-2.5-flash-lite"
 
     /** Cosmetic ingredient label recognition (OCR-level accuracy required) */
-    const val LABEL_SCAN = "google/gemini-2.0-flash-lite"
+    const val LABEL_SCAN = "google/gemini-2.5-flash-lite"
 }
 
