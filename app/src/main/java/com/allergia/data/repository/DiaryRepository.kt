@@ -65,6 +65,7 @@ class DiaryRepository @Inject constructor(
     fun getVapeSessionsForDate(date: LocalDate): Flow<List<VapeSession>> = dao.getVapeSessionsForDate(date)
     suspend fun insertVapeSession(session: VapeSession): Long = dao.insertVapeSession(session)
     suspend fun deleteVapeSession(session: VapeSession) = dao.deleteVapeSession(session)
+    suspend fun getLatestVapeSessionBefore(date: LocalDate): VapeSession? = dao.getLatestVapeSessionBefore(date)
 
     // ── Backup / Restore ──────────────────────────────────────────────────────
 

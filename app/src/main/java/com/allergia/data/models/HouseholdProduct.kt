@@ -37,7 +37,9 @@ data class HouseholdProduct(
     val allergenicityLabel: String = "",
     // Path to compressed label photo stored locally
     val labelPhotoPath: String? = null,
-    val notes: String = ""
+    val notes: String = "",
+    /** If true, this product is shown on every diary date until manually removed */
+    val isPersistent: Boolean = true
 )
 
 enum class ProductCategory(val displayName: String, val emoji: String) {

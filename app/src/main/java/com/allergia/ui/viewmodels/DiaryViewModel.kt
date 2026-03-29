@@ -196,6 +196,19 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch { repository.deleteProduct(product) }
     }
 
+    fun toggleProductPersistence(product: HouseholdProduct) {
+        viewModelScope.launch { repository.updateProduct(product.copy(isPersistent = !product.isPersistent)) }
+    }
+
+    fun addHouseholdProductManualPersistent(name: String, brand: String, category: ProductCategory, isPersistent: Boolean) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val date = _selectedDate.value
+            repository.getOrCreateEntry(date)
+            repository.insertProduct(HouseholdProduct(entryDate = date, name = name.trim(), brand = brand.trim(), category = category, isPersistent = isPersistent))
+        }
+    }
+
     fun dismissLabelAnalysis() { _labelAnalysisState.value = LabelAnalysisState.Idle }
 
     // ─── Food ────────────────────────────────────────────────────────────────
@@ -273,6 +286,19 @@ class DiaryViewModel @Inject constructor(
     fun dismissSideEffects() { _sideEffectsState.value = SideEffectsUiState.Idle }
 
     // ─── Vape ─────────────────────────────────────────────────────────────────
+
+    fun copyYesterdayVape() {
+        viewModelScope.launch {
+            val today = _selectedDate.value
+            // Look for any session on or before yesterday
+            val prev = repository.getLatestVapeSessionBefore(today.minusDays(1)) ?: return@launch
+            // Only copy if there's no session for today yet
+            if (vapeSessions.value.isEmpty()) {
+                repository.getOrCreateEntry(today)
+                repository.insertVapeSession(prev.copy(id = 0, entryDate = today))
+            }
+        }
+    }
 
     fun addVapeSession(brand: String, flavor: String, nicotineLevel: String, pgVgRatio: String, notes: String) {
         viewModelScope.launch {

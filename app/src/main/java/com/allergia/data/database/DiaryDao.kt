@@ -98,10 +98,10 @@ interface DiaryDao {
     @Delete
     suspend fun deleteHouseholdProduct(product: HouseholdProduct)
 
-    @Query("SELECT * FROM household_products WHERE entryDate = :date ORDER BY category, id")
+    @Query("SELECT * FROM household_products WHERE entryDate = :date OR isPersistent = 1 ORDER BY category, id")
     fun getProductsForDate(date: LocalDate): Flow<List<HouseholdProduct>>
 
-    @Query("SELECT * FROM household_products WHERE entryDate BETWEEN :from AND :to ORDER BY entryDate, category")
+    @Query("SELECT DISTINCT * FROM household_products WHERE (entryDate BETWEEN :from AND :to) OR isPersistent = 1 ORDER BY entryDate, category")
     suspend fun getProductsInRange(from: LocalDate, to: LocalDate): List<HouseholdProduct>
 
     @Query("SELECT * FROM household_products WHERE name LIKE '%' || :query || '%' ORDER BY entryDate DESC LIMIT 20")
@@ -126,6 +126,9 @@ interface DiaryDao {
 
     @Query("SELECT * FROM vape_sessions WHERE entryDate = :date ORDER BY id")
     fun getVapeSessionsForDate(date: LocalDate): Flow<List<com.allergia.data.models.VapeSession>>
+
+    @Query("SELECT * FROM vape_sessions WHERE entryDate <= :date ORDER BY entryDate DESC, id DESC LIMIT 1")
+    suspend fun getLatestVapeSessionBefore(date: LocalDate): com.allergia.data.models.VapeSession?
 
     @Query("SELECT * FROM vape_sessions WHERE entryDate BETWEEN :from AND :to ORDER BY entryDate, id")
     suspend fun getVapeSessionsInRange(from: LocalDate, to: LocalDate): List<com.allergia.data.models.VapeSession>

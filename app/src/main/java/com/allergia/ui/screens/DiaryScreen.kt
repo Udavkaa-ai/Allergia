@@ -304,15 +304,17 @@ fun DiaryScreen(
 
             HouseholdProductsSection(
                 items = householdProducts,
-                onAddManual = { name, brand, cat -> viewModel.addHouseholdProductManual(name, brand, cat) },
+                onAddManual = { name, brand, cat, persist -> viewModel.addHouseholdProductManualPersistent(name, brand, cat, persist) },
                 onDelete = viewModel::deleteHouseholdProduct,
+                onTogglePersistence = viewModel::toggleProductPersistence,
                 onScanLabel = { showLabelPhotoSheet = true }
             )
 
             VapeSection(
                 sessions = vapeSessions,
                 onAdd = { brand, flavor, nic, pgvg, notes -> viewModel.addVapeSession(brand, flavor, nic, pgvg, notes) },
-                onDelete = viewModel::deleteVapeSession
+                onDelete = viewModel::deleteVapeSession,
+                onCopyYesterday = viewModel::copyYesterdayVape
             )
 
             SkinConditionSection(
@@ -460,8 +462,9 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
 @Composable
 private fun HouseholdProductsSection(
     items: List<HouseholdProduct>,
-    onAddManual: (String, String, ProductCategory) -> Unit,
+    onAddManual: (String, String, ProductCategory, Boolean) -> Unit,
     onDelete: (HouseholdProduct) -> Unit,
+    onTogglePersistence: (HouseholdProduct) -> Unit,
     onScanLabel: () -> Unit
 ) {
     var showManualDialog by remember { mutableStateOf(false) }
@@ -475,7 +478,6 @@ private fun HouseholdProductsSection(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                // Scan label button
                 FilledTonalIconButton(onClick = onScanLabel, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.DocumentScanner, "Сканировать состав", modifier = Modifier.size(18.dp))
                 }
@@ -485,27 +487,19 @@ private fun HouseholdProductsSection(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Text(
-                "Гель для посуды, шампунь, крем, зубная паста...",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
+            // Count persistent vs one-time
+            val persistentCount = items.count { it.isPersistent }
+            val hint = if (persistentCount > 0)
+                "📌 $persistentCount постоянных · остальные только сегодня"
+            else
+                "Добавьте средства, которые используете ежедневно"
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(Modifier.height(8.dp))
 
             if (items.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "📷 Сканируйте этикетку или добавьте вручную",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
+                EmptyHint("📷 Сканируйте этикетку или добавьте вручную")
             } else {
-                val grouped = items.groupBy { it.category }
-                grouped.forEach { (cat, group) ->
+                items.groupBy { it.category }.forEach { (cat, group) ->
                     Text(
                         "${cat.emoji} ${cat.displayName}",
                         style = MaterialTheme.typography.labelMedium,
@@ -513,7 +507,11 @@ private fun HouseholdProductsSection(
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                     group.forEach { product ->
-                        HouseholdProductRow(product = product, onDelete = { onDelete(product) })
+                        HouseholdProductRow(
+                            product = product,
+                            onDelete = { onDelete(product) },
+                            onTogglePersistence = { onTogglePersistence(product) }
+                        )
                     }
                 }
             }
@@ -523,13 +521,17 @@ private fun HouseholdProductsSection(
     if (showManualDialog) {
         AddHouseholdProductDialog(
             onDismiss = { showManualDialog = false },
-            onConfirm = { name, brand, cat -> onAddManual(name, brand, cat); showManualDialog = false }
+            onConfirm = { name, brand, cat, persist -> onAddManual(name, brand, cat, persist); showManualDialog = false }
         )
     }
 }
 
 @Composable
-private fun HouseholdProductRow(product: HouseholdProduct, onDelete: () -> Unit) {
+private fun HouseholdProductRow(
+    product: HouseholdProduct,
+    onDelete: () -> Unit,
+    onTogglePersistence: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -549,6 +551,15 @@ private fun HouseholdProductRow(product: HouseholdProduct, onDelete: () -> Unit)
         product.allergenicityScore?.let { score ->
             AllergenicityBadge(score, Modifier.padding(end = 4.dp))
         }
+        // Pin / unpin toggle
+        IconButton(onClick = onTogglePersistence, modifier = Modifier.size(32.dp)) {
+            Icon(
+                if (product.isPersistent) Icons.Default.PushPin else Icons.Default.PushPin,
+                contentDescription = if (product.isPersistent) "Убрать из постоянных" else "Сделать постоянным",
+                modifier = Modifier.size(16.dp),
+                tint = if (product.isPersistent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            )
+        }
         IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
             Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
         }
@@ -559,12 +570,13 @@ private fun HouseholdProductRow(product: HouseholdProduct, onDelete: () -> Unit)
 @Composable
 private fun AddHouseholdProductDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, ProductCategory) -> Unit
+    onConfirm: (String, String, ProductCategory, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var brand by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(ProductCategory.OTHER) }
     var categoryExpanded by remember { mutableStateOf(false) }
+    var isPersistent by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -591,10 +603,20 @@ private fun AddHouseholdProductDialog(
                         }
                     }
                 }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(checked = isPersistent, onCheckedChange = { isPersistent = it })
+                    Column {
+                        Text("📌 Показывать каждый день", style = MaterialTheme.typography.bodyMedium)
+                        Text("Не нужно вносить повторно", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, brand, category) }, enabled = name.isNotBlank()) { Text("Добавить") }
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, brand, category, isPersistent) }, enabled = name.isNotBlank()) { Text("Добавить") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
@@ -751,30 +773,51 @@ private fun EmptyHint(text: String) {
 private fun VapeSection(
     sessions: List<VapeSession>,
     onAdd: (String, String, String, String, String) -> Unit,
-    onDelete: (VapeSession) -> Unit
+    onDelete: (VapeSession) -> Unit,
+    onCopyYesterday: () -> Unit = {}
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
-    SectionCard(title = "💨 Вейп", onAdd = { showDialog = true }) {
-        if (sessions.isEmpty()) {
-            EmptyHint("Добавьте информацию о вейпе")
-        } else {
-            sessions.forEach { s ->
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        val title = listOfNotNull(
-                            s.brand.takeIf { it.isNotBlank() },
-                            s.flavor.takeIf { it.isNotBlank() }
-                        ).joinToString(" — ").ifBlank { "Вейп" }
-                        Text(title, style = MaterialTheme.typography.bodyMedium)
-                        val details = listOfNotNull(
-                            s.nicotineLevel.takeIf { it.isNotBlank() }?.let { "Ник: $it" },
-                            s.pgVgRatio.takeIf { it.isNotBlank() }?.let { "PG/VG: $it" }
-                        ).joinToString(" · ")
-                        if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                        if (s.notes.isNotBlank()) Text(s.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("💨 Вейп", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (sessions.isEmpty()) {
+                    TextButton(
+                        onClick = onCopyYesterday,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text("как вчера", style = MaterialTheme.typography.labelMedium)
                     }
-                    IconButton(onClick = { onDelete(s) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) }
+                    Spacer(Modifier.width(2.dp))
+                }
+                FilledTonalIconButton(onClick = { showDialog = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Add, "Добавить", modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            if (sessions.isEmpty()) {
+                EmptyHint("Добавьте информацию о вейпе")
+            } else {
+                sessions.forEach { s ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            val title = listOfNotNull(
+                                s.brand.takeIf { it.isNotBlank() },
+                                s.flavor.takeIf { it.isNotBlank() }
+                            ).joinToString(" — ").ifBlank { "Вейп" }
+                            Text(title, style = MaterialTheme.typography.bodyMedium)
+                            val details = listOfNotNull(
+                                s.nicotineLevel.takeIf { it.isNotBlank() }?.let { "Ник: $it" },
+                                s.pgVgRatio.takeIf { it.isNotBlank() }?.let { "PG/VG: $it" }
+                            ).joinToString(" · ")
+                            if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                            if (s.notes.isNotBlank()) Text(s.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        }
+                        IconButton(onClick = { onDelete(s) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
             }
         }
