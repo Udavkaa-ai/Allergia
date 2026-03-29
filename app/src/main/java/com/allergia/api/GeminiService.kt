@@ -22,7 +22,7 @@ class GeminiService @Inject constructor(
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
     private suspend fun authHeader(): String {
-        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first()
+        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first().trim()
         if (key.isBlank()) throw Exception("API ключ не настроен. Перейдите в Настройки и введите ключ OpenRouter.")
         return "Bearer $key"
     }

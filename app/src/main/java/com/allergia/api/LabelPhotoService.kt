@@ -69,7 +69,7 @@ class LabelPhotoService @Inject constructor(
     }
 
     private suspend fun authHeader(): String {
-        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first()
+        val key = context.appDataStore.data.map { it[PreferenceKeys.OPENROUTER_API_KEY] ?: "" }.first().trim()
         if (key.isBlank()) throw Exception("API ключ не настроен. Перейдите в Настройки.")
         return "Bearer $key"
     }
