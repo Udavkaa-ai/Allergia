@@ -22,6 +22,7 @@ import com.allergia.data.models.ProfileItem
 import com.allergia.data.models.ProfileItemType
 import com.allergia.ui.viewmodels.BackupStatus
 import com.allergia.ui.viewmodels.SettingsViewModel
+import com.allergia.BuildConfig
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -450,7 +451,7 @@ fun SettingsScreen(
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("О приложении", style = MaterialTheme.typography.titleSmall)
-                    Text("Allergia v1.0", style = MaterialTheme.typography.bodySmall)
+                    Text("Allergia v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodySmall)
                     Text("AI: Gemini 2.5 Flash (OpenRouter)", style = MaterialTheme.typography.bodySmall)
                     Text("База данных: Room (локальная)", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(4.dp))
