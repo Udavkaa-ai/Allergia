@@ -2,7 +2,7 @@ name: Android CI Build
 
 on:
   push:
-    branches: [ "claude/android-allergy-tracker-46z36", "main" ]
+    branches: [ "claude/android-allergy-tracker-46z36", "claude/enhance-allergy-diary-K4Cui", "main" ]
   pull_request:
     branches: [ "main" ]
 
