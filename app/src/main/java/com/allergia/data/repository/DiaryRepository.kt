@@ -100,9 +100,13 @@ class DiaryRepository @Inject constructor(
         dao.clearDiaryEntries()
 
         dao.insertAllEntries(data.diaryEntries)
-        @Suppress("SENSELESS_COMPARISON")
         val sanitizedFoodItems = data.foodItems.map { item ->
-            if (item.ingredients == null) item.copy(ingredients = "") else item
+            item.copy(
+                ingredients    = (item.ingredients    as? String) ?: "",
+                amount         = (item.amount         as? String) ?: "",
+                allergenicityLabel = (item.allergenicityLabel as? String) ?: "",
+                knownAllergens = (item.knownAllergens as? String) ?: ""
+            )
         }
         dao.insertAllFoodItems(sanitizedFoodItems)
         dao.insertAllMedications(data.medications)
