@@ -83,10 +83,12 @@ class DiaryRepository @Inject constructor(
         householdProducts  = dao.getAllHouseholdProductsList(),
         analysisResults    = dao.getAllAnalysisResultsList(),
         vapeSessions       = dao.getAllVapeSessionsList(),
-        profileItems       = dao.getAllProfileItemsList()
+        profileItems       = dao.getAllProfileItemsList(),
+        allergyTestResults = dao.getAllAllergyTestResultsList()
     )
 
     suspend fun restoreFromBackup(data: BackupData) {
+        dao.clearAllergyTestResults()
         dao.clearAnalysisResults()
         dao.clearHouseholdProducts()
         dao.clearSymptoms()
@@ -106,6 +108,7 @@ class DiaryRepository @Inject constructor(
         dao.insertAllAnalysisResults(data.analysisResults)
         dao.insertAllVapeSessions(data.vapeSessions)
         data.profileItems.forEach { dao.insertProfileItem(it) }
+        dao.insertAllAllergyTestResults(data.allergyTestResults)
     }
 
     // Allergy Test Results

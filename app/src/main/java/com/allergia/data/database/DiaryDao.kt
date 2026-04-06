@@ -228,6 +228,9 @@ interface DiaryDao {
     @Query("SELECT * FROM allergy_test_results ORDER BY testDate DESC")
     suspend fun getAllAllergyTestResultsList(): List<AllergyTestResult>
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllAllergyTestResults(results: List<AllergyTestResult>)
+
     @Query("DELETE FROM allergy_test_results")
     suspend fun clearAllergyTestResults()
 }

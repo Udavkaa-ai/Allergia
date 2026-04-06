@@ -12,7 +12,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 
 data class BackupData(
-    val version: Int = 3,
+    val version: Int = 4,
     val exportedAt: String = LocalDateTime.now().toString(),
     val diaryEntries: List<DiaryEntry> = emptyList(),
     val foodItems: List<FoodItem> = emptyList(),
@@ -22,7 +22,8 @@ data class BackupData(
     val householdProducts: List<HouseholdProduct> = emptyList(),
     val analysisResults: List<AnalysisResult> = emptyList(),
     val vapeSessions: List<VapeSession> = emptyList(),
-    val profileItems: List<ProfileItem> = emptyList()
+    val profileItems: List<ProfileItem> = emptyList(),
+    val allergyTestResults: List<AllergyTestResult> = emptyList()
 )
 
 object BackupManager {
