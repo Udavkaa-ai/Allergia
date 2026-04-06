@@ -507,7 +507,7 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
             if (food.amount.isNotBlank()) {
                 Text(food.amount, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
-            if (food.ingredients.isNotBlank()) {
+            if (!food.ingredients.isNullOrBlank()) {
                 Text("Состав: ${food.ingredients}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
             if (food.knownAllergens.isNotBlank()) {

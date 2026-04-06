@@ -100,15 +100,7 @@ class DiaryRepository @Inject constructor(
         dao.clearDiaryEntries()
 
         dao.insertAllEntries(data.diaryEntries)
-        val sanitizedFoodItems = data.foodItems.map { item ->
-            item.copy(
-                ingredients    = (item.ingredients    as? String) ?: "",
-                amount         = (item.amount         as? String) ?: "",
-                allergenicityLabel = (item.allergenicityLabel as? String) ?: "",
-                knownAllergens = (item.knownAllergens as? String) ?: ""
-            )
-        }
-        dao.insertAllFoodItems(sanitizedFoodItems)
+        dao.insertAllFoodItems(data.foodItems)
         dao.insertAllMedications(data.medications)
         dao.insertAllSkinConditions(data.skinConditions)
         dao.insertAllSymptoms(data.symptoms)
