@@ -226,7 +226,7 @@ class DiaryViewModel @Inject constructor(
 
     // ─── Food ────────────────────────────────────────────────────────────────
 
-    fun addFoodItem(name: String, amount: String, mealType: MealType, ingredients: String = "") {
+    fun addFoodItem(name: String, amount: String, mealType: MealType) {
         if (name.isBlank()) return
         viewModelScope.launch {
             val date = _selectedDate.value
@@ -235,8 +235,7 @@ class DiaryViewModel @Inject constructor(
                 entryDate = date,
                 name = name.trim(),
                 amount = amount.trim(),
-                mealType = mealType,
-                ingredients = ingredients.trim()
+                mealType = mealType
             )
             val id = repository.insertFoodItem(item)
             assessAllergenicity(item.copy(id = id))

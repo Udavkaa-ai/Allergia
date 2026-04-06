@@ -380,7 +380,7 @@ fun DiaryScreen(
         ) {
             FoodSection(
                 items = foodItems,
-                onAdd = { name, amount, type, ingredients -> viewModel.addFoodItem(name, amount, type, ingredients) },
+                onAdd = { name, amount, type -> viewModel.addFoodItem(name, amount, type) },
                 onDelete = viewModel::deleteFoodItem,
                 onPhotoClick = { showPhotoSourceSheet = true },
                 onArchiveClick = onNavigateToArchive
@@ -432,7 +432,7 @@ fun DiaryScreen(
 @Composable
 private fun FoodSection(
     items: List<FoodItem>,
-    onAdd: (String, String, MealType, String) -> Unit,
+    onAdd: (String, String, MealType) -> Unit,
     onDelete: (FoodItem) -> Unit,
     onPhotoClick: () -> Unit,
     onArchiveClick: () -> Unit = {}
@@ -491,7 +491,7 @@ private fun FoodSection(
     if (showDialog) {
         AddFoodDialog(
             onDismiss = { showDialog = false },
-            onConfirm = { name, amount, type, ingredients -> onAdd(name, amount, type, ingredients); showDialog = false }
+            onConfirm = { name, amount, type -> onAdd(name, amount, type); showDialog = false }
         )
     }
 }
@@ -507,9 +507,6 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
             if (food.amount.isNotBlank()) {
                 Text(food.amount, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
-            if (!food.ingredients.isNullOrBlank()) {
-                Text("Состав: ${food.ingredients}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-            }
             if (food.knownAllergens.isNotBlank()) {
                 Text("⚠ ${food.knownAllergens}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFA726))
             }
@@ -523,10 +520,9 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, MealType, String) -> Unit) {
+private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, MealType) -> Unit) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
-    var ingredients by remember { mutableStateOf("") }
     var mealType by remember { mutableStateOf(MealType.OTHER) }
     var expanded by remember { mutableStateOf(false) }
 
@@ -535,19 +531,10 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
         title = { Text("Добавить продукт вручную") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Количество (200г, 1 стакан)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    value = ingredients,
-                    onValueChange = { ingredients = it },
-                    label = { Text("Состав / ингредиенты") },
-                    placeholder = { Text("Например: помидор, огурец, масло, соль") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(value = mealType.displayName, onValueChange = {}, readOnly = true, label = { Text("Приём пищи") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -558,7 +545,7 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType, ingredients) }, enabled = name.isNotBlank()) { Text("Добавить") } },
+        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType) }, enabled = name.isNotBlank()) { Text("Добавить") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
 }

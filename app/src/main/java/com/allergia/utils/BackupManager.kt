@@ -11,25 +11,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-// Explicit deserializer for FoodItem so that fields absent in old backups
-// (e.g. `ingredients` added in version 2) receive their default values
-// instead of Gson's Java-null, which violates Room NOT NULL constraints.
-private val foodItemDeserializer = JsonDeserializer { json, _, _ ->
-    val o = json.asJsonObject
-    FoodItem(
-        id                 = o.get("id")?.asLong ?: 0L,
-        entryDate          = LocalDate.parse(o.get("entryDate").asString),
-        name               = o.get("name")?.asString ?: "",
-        amount             = o.get("amount")?.asString ?: "",
-        mealType           = o.get("mealType")?.asString
-                                 ?.let { runCatching { MealType.valueOf(it) }.getOrNull() }
-                                 ?: MealType.OTHER,
-        allergenicityScore = o.get("allergenicityScore")?.takeIf { !it.isJsonNull }?.asFloat,
-        allergenicityLabel = o.get("allergenicityLabel")?.asString ?: "",
-        knownAllergens     = o.get("knownAllergens")?.asString ?: "",
-        ingredients        = o.get("ingredients")?.asString ?: ""
-    )
-}
 
 data class BackupData(
     val version: Int = 4,
@@ -73,7 +54,6 @@ object BackupManager {
             LocalTime::class.java,
             JsonDeserializer { json, _, _ -> LocalTime.parse(json.asString) }
         )
-        .registerTypeAdapter(FoodItem::class.java, foodItemDeserializer)
         .setPrettyPrinting()
         .create()
 
