@@ -209,6 +209,94 @@ $diaryContext
         }
     }
 
+    // ─── Vape photo recognition ────────────────────────────────────────────────
+
+    suspend fun recognizeVapeFromPhoto(base64: String): Result<VapeRecognitionResult> =
+        runCatching {
+            val dataUrl = "data:image/jpeg;base64,$base64"
+            val prompt = """
+На фото — вейп-устройство, жидкость или упаковка. Определи все параметры.
+
+Ответь строго в JSON (без markdown):
+{
+  "brand": "Название бренда/устройства",
+  "flavor": "Вкус жидкости",
+  "nicotineLevel": "Уровень никотина, например 6 мг",
+  "pgVgRatio": "Соотношение PG/VG, например 70/30",
+  "notes": "Дополнительные замечания, состав, предупреждения"
+}
+
+Если информация не видна — оставь поле пустой строкой.
+            """.trimIndent()
+
+            val response = api.visionCompletion(
+                authorization = authHeader(),
+                request = VisionRequest(
+                    model = Models.FOOD_PHOTO,
+                    messages = listOf(
+                        VisionMessage(
+                            role = "user",
+                            content = listOf(
+                                VisionContentPart(type = "text", text = prompt),
+                                VisionContentPart(type = "image_url", imageUrl = ImageUrlData(url = dataUrl))
+                            )
+                        )
+                    ),
+                    temperature = 0.1,
+                    maxTokens = 512
+                )
+            )
+            if (response.error != null) throw Exception("API Error: ${response.error.message}")
+            val content = response.choices.firstOrNull()?.message?.content ?: throw Exception("Пустой ответ")
+            gson.fromJson(cleanJson(content), VapeRecognitionResult::class.java)
+        }
+
+    // ─── Allergy test photo analysis ──────────────────────────────────────────
+
+    suspend fun analyzeAllergyTestPhoto(base64: String): Result<AllergyTestAnalysisResult> =
+        runCatching {
+            val dataUrl = "data:image/jpeg;base64,$base64"
+            val prompt = """
+На фото — результат теста на аллергены (кожный прик-тест, IgE анализ крови, патч-тест или другой).
+Проанализируй результаты.
+
+Ответь строго в JSON (без markdown):
+{
+  "testType": "Тип теста: кожный прик-тест | IgE анализ | патч-тест | другое",
+  "labName": "Название лаборатории или клиники (если видно)",
+  "positiveAllergens": ["аллерген1", "аллерген2"],
+  "borderlineAllergens": ["аллерген3"],
+  "negativeAllergens": ["аллерген4", "аллерген5"],
+  "summary": "Краткое резюме результатов теста",
+  "recommendation": "Рекомендации по результатам"
+}
+
+Если тип теста неясен — укажи 'неизвестный тест'.
+Перечисляй только те аллергены, которые явно видны на фото/документе.
+            """.trimIndent()
+
+            val response = api.visionCompletion(
+                authorization = authHeader(),
+                request = VisionRequest(
+                    model = Models.LABEL_SCAN,
+                    messages = listOf(
+                        VisionMessage(
+                            role = "user",
+                            content = listOf(
+                                VisionContentPart(type = "text", text = prompt),
+                                VisionContentPart(type = "image_url", imageUrl = ImageUrlData(url = dataUrl))
+                            )
+                        )
+                    ),
+                    temperature = 0.1,
+                    maxTokens = 1024
+                )
+            )
+            if (response.error != null) throw Exception("API Error: ${response.error.message}")
+            val content = response.choices.firstOrNull()?.message?.content ?: throw Exception("Пустой ответ")
+            gson.fromJson(cleanJson(content), AllergyTestAnalysisResult::class.java)
+        }
+
     // ─── Helpers ───────────────────────────────────────────────────────────────
 
     /**
@@ -334,6 +422,21 @@ $diaryContext
             sb.appendLine()
         }
 
+        // Allergy test results — вне разбивки по датам, как общий контекст
+        if (data.allergyTestResults.isNotEmpty()) {
+            sb.appendLine("═══ РЕЗУЛЬТАТЫ ТЕСТОВ НА АЛЛЕРГЕНЫ ═══")
+            data.allergyTestResults.forEach { test ->
+                sb.appendLine("📋 ${test.testDate.format(dateFormatter)} — ${test.testType.ifBlank { "тест" }}")
+                if (test.positiveAllergens.isNotBlank())
+                    sb.appendLine("  ✅ Положительные: ${test.positiveAllergens}")
+                if (test.borderlineAllergens.isNotBlank())
+                    sb.appendLine("  ⚠️ Пограничные: ${test.borderlineAllergens}")
+                if (test.summary.isNotBlank())
+                    sb.appendLine("  ${test.summary}")
+            }
+            sb.appendLine()
+        }
+
         return sb.toString()
     }
 
@@ -396,5 +499,23 @@ data class MedicationSideEffectsResponse(
     val allergenicPotential: String = "неизвестен",
     val crossReactivity: List<String> = emptyList(),
     val importantWarnings: List<String> = emptyList(),
+    val recommendation: String = ""
+)
+
+data class VapeRecognitionResult(
+    val brand: String = "",
+    val flavor: String = "",
+    val nicotineLevel: String = "",
+    val pgVgRatio: String = "",
+    val notes: String = ""
+)
+
+data class AllergyTestAnalysisResult(
+    val testType: String = "",
+    val labName: String = "",
+    val positiveAllergens: List<String> = emptyList(),
+    val borderlineAllergens: List<String> = emptyList(),
+    val negativeAllergens: List<String> = emptyList(),
+    val summary: String = "",
     val recommendation: String = ""
 )

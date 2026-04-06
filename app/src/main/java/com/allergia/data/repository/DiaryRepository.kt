@@ -108,7 +108,15 @@ class DiaryRepository @Inject constructor(
         data.profileItems.forEach { dao.insertProfileItem(it) }
     }
 
-    // Data for AI context (now includes household products)
+    // Allergy Test Results
+    fun getAllAllergyTestResults(): Flow<List<AllergyTestResult>> = dao.getAllAllergyTestResults()
+    suspend fun insertAllergyTestResult(result: AllergyTestResult): Long = dao.insertAllergyTestResult(result)
+    suspend fun deleteAllergyTestResult(result: AllergyTestResult) = dao.deleteAllergyTestResult(result)
+
+    // Sorted products for search screen
+    fun getAllProductsWithScores(): Flow<List<HouseholdProduct>> = dao.getAllProductsWithScores()
+
+    // Data for AI context (now includes household products + allergy tests)
     suspend fun getDataForRange(from: LocalDate, to: LocalDate): DiaryRangeData {
         return DiaryRangeData(
             foods = dao.getFoodItemsInRange(from, to),
@@ -118,6 +126,7 @@ class DiaryRepository @Inject constructor(
             householdProducts = dao.getProductsInRange(from, to),
             vapeSessions = dao.getVapeSessionsInRange(from, to),
             profileItems = dao.getAllProfileItemsList(),
+            allergyTestResults = dao.getAllAllergyTestResultsList(),
             periodStart = from,
             periodEnd = to
         )
@@ -132,6 +141,7 @@ data class DiaryRangeData(
     val householdProducts: List<HouseholdProduct>,
     val vapeSessions: List<VapeSession> = emptyList(),
     val profileItems: List<ProfileItem> = emptyList(),
+    val allergyTestResults: List<AllergyTestResult> = emptyList(),
     val periodStart: LocalDate,
     val periodEnd: LocalDate
 )

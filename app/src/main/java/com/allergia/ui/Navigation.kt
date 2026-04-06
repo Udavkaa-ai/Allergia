@@ -6,16 +6,23 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import com.allergia.ui.screens.*
+import java.time.LocalDate
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
-    object Diary : Screen("diary")
+    object Diary : Screen("diary/{date}") {
+        fun withDate(date: LocalDate) = "diary/${date}"
+        fun today() = "diary/${LocalDate.now()}"
+    }
     object Analysis : Screen("analysis")
     object ProductSearch : Screen("product_search")
     object Settings : Screen("settings")
     object PhotoArchive : Screen("photo_archive")
+    object AllergyTest : Screen("allergy_test")
 }
 
 @Composable
@@ -60,13 +67,22 @@ fun AllergiaNavigation() {
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
-                    onNavigateToDiary = { navController.navigate(Screen.Diary.route) },
+                    onNavigateToDiary = { date ->
+                        navController.navigate(Screen.Diary.withDate(date))
+                    },
                     onNavigateToAnalysis = { navController.navigate(Screen.Analysis.route) },
-                    onNavigateToSearch = { navController.navigate(Screen.ProductSearch.route) }
+                    onNavigateToSearch = { navController.navigate(Screen.ProductSearch.route) },
+                    onNavigateToAllergyTest = { navController.navigate(Screen.AllergyTest.route) }
                 )
             }
-            composable(Screen.Diary.route) {
+            composable(
+                route = Screen.Diary.route,
+                arguments = listOf(navArgument("date") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val dateArg = backStackEntry.arguments?.getString("date")
+                val initialDate = runCatching { LocalDate.parse(dateArg) }.getOrDefault(LocalDate.now())
                 DiaryScreen(
+                    initialDate = initialDate,
                     onBack = { navController.popBackStack() },
                     onNavigateToArchive = { navController.navigate(Screen.PhotoArchive.route) }
                 )
@@ -82,6 +98,9 @@ fun AllergiaNavigation() {
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.AllergyTest.route) {
+                AllergyTestScreen(onBack = { navController.popBackStack() })
             }
         }
     }

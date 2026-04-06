@@ -107,6 +107,9 @@ interface DiaryDao {
     @Query("SELECT * FROM household_products WHERE name LIKE '%' || :query || '%' ORDER BY entryDate DESC LIMIT 20")
     suspend fun searchProducts(query: String): List<HouseholdProduct>
 
+    @Query("SELECT * FROM household_products WHERE allergenicityScore IS NOT NULL ORDER BY allergenicityScore ASC")
+    fun getAllProductsWithScores(): Flow<List<HouseholdProduct>>
+
     // AnalysisResult
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAnalysis(result: AnalysisResult): Long
@@ -211,4 +214,20 @@ interface DiaryDao {
     @Query("DELETE FROM analysis_results")   suspend fun clearAnalysisResults()
     @Query("DELETE FROM vape_sessions")      suspend fun clearVapeSessions()
     @Query("DELETE FROM diary_entries")      suspend fun clearDiaryEntries()
+
+    // AllergyTestResult
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllergyTestResult(result: AllergyTestResult): Long
+
+    @Delete
+    suspend fun deleteAllergyTestResult(result: AllergyTestResult)
+
+    @Query("SELECT * FROM allergy_test_results ORDER BY testDate DESC")
+    fun getAllAllergyTestResults(): Flow<List<AllergyTestResult>>
+
+    @Query("SELECT * FROM allergy_test_results ORDER BY testDate DESC")
+    suspend fun getAllAllergyTestResultsList(): List<AllergyTestResult>
+
+    @Query("DELETE FROM allergy_test_results")
+    suspend fun clearAllergyTestResults()
 }

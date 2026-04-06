@@ -1,7 +1,14 @@
 package com.allergia.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -11,13 +18,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.allergia.api.ProductAllergenicityResponse
+import com.allergia.data.models.HouseholdProduct
 import com.allergia.ui.components.AllergenicityBadge
+import com.allergia.ui.components.LabelAnalyzingDialog
+import com.allergia.ui.components.LabelResultDialog
 import com.allergia.ui.viewmodels.AllergenicityUiState
 import com.allergia.ui.viewmodels.DiaryViewModel
+import com.allergia.ui.viewmodels.LabelAnalysisState
+import com.allergia.utils.ImageUtils
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -25,18 +40,102 @@ fun ProductSearchScreen(
     onBack: () -> Unit,
     viewModel: DiaryViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val state by viewModel.allergenicityState.collectAsState()
+    val labelState by viewModel.labelAnalysisState.collectAsState()
+    val allProducts by viewModel.allProductsWithScores.collectAsState()
     var query by remember { mutableStateOf("") }
+    var labelPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var showSortedList by remember { mutableStateOf(false) }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) labelPhotoUri?.let { viewModel.analyzeLabelPhoto(it) }
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { labelPhotoUri = it; viewModel.analyzeLabelPhoto(it) }
+    }
+
+    var showPhotoSheet by remember { mutableStateOf(false) }
+
+    fun launchCamera() {
+        val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasPerm) {
+            val file = ImageUtils.createTempPhotoFile(context)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            labelPhotoUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Label analysis dialogs
+    when (val ls = labelState) {
+        is LabelAnalysisState.Analyzing -> LabelAnalyzingDialog()
+        is LabelAnalysisState.Results -> LabelResultDialog(
+            result = ls.result,
+            photoUri = ls.photoUri,
+            onConfirm = { name, brand, category ->
+                viewModel.confirmHouseholdProduct(name, brand, category, ls.result, ls.photoUri.toString())
+            },
+            onDismiss = viewModel::dismissLabelAnalysis
+        )
+        is LabelAnalysisState.Error -> AlertDialog(
+            onDismissRequest = viewModel::dismissLabelAnalysis,
+            title = { Text("Ошибка распознавания") },
+            text = { Text(ls.message) },
+            confirmButton = { TextButton(onClick = viewModel::dismissLabelAnalysis) { Text("OK") } }
+        )
+        else -> {}
+    }
+
+    // Photo source sheet
+    if (showPhotoSheet) {
+        ModalBottomSheet(onDismissRequest = { showPhotoSheet = false }) {
+            Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+                Text("Сканировать этикетку продукта", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ElevatedButton(
+                        onClick = { showPhotoSheet = false; launchCamera() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📷", style = MaterialTheme.typography.headlineMedium)
+                            Text("Камера", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    ElevatedButton(
+                        onClick = { showPhotoSheet = false; galleryLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🖼", style = MaterialTheme.typography.headlineMedium)
+                            Text("Галерея", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Оценка аллергенности") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Назад") } },
+                actions = {
+                    IconButton(onClick = { showPhotoSheet = true }) {
+                        Icon(Icons.Default.DocumentScanner, "Сканировать этикетку")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
                 )
             )
         }
@@ -49,7 +148,7 @@ fun ProductSearchScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                "Введите название продукта, и Gemini 2.5 оценит его аллергенность с указанием конкретных аллергенов, возможных реакций и безопасных альтернатив.",
+                "Введите название продукта или отсканируйте этикетку 📷 — Gemini 2.5 оценит аллергенность.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
@@ -62,9 +161,7 @@ fun ProductSearchScreen(
                 placeholder = { Text("Например: арахис, молоко, яйца...") },
                 trailingIcon = {
                     if (query.isNotBlank()) {
-                        IconButton(onClick = {
-                            viewModel.checkProductAllergenicity(query)
-                        }) {
+                        IconButton(onClick = { viewModel.checkProductAllergenicity(query) }) {
                             Icon(Icons.Default.Search, "Проверить")
                         }
                     }
@@ -73,14 +170,24 @@ fun ProductSearchScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Button(
-                onClick = { viewModel.checkProductAllergenicity(query) },
-                enabled = query.isNotBlank() && state !is AllergenicityUiState.Loading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Science, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Оценить аллергенность")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.checkProductAllergenicity(query) },
+                    enabled = query.isNotBlank() && state !is AllergenicityUiState.Loading,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Science, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Оценить")
+                }
+                OutlinedButton(
+                    onClick = { showPhotoSheet = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("По фото")
+                }
             }
 
             AnimatedContent(targetState = state, transitionSpec = { fadeIn() togetherWith fadeOut() }) { s ->
@@ -94,6 +201,69 @@ fun ProductSearchScreen(
                         }
                     }
                 }
+            }
+
+            // Scanned products list section
+            if (allProducts.isNotEmpty()) {
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "📋 Проверенные продукты",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { showSortedList = !showSortedList }) {
+                        Text(if (showSortedList) "Скрыть" else "Показать (${allProducts.size})")
+                    }
+                }
+
+                if (showSortedList) {
+                    Text(
+                        "Отсортированы от наименее аллергенного",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    allProducts.forEach { product ->
+                        ScannedProductRow(
+                            product = product,
+                            onAddToDiary = {
+                                viewModel.addHouseholdProductManualPersistent(
+                                    product.name, product.brand, product.category, false
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScannedProductRow(
+    product: HouseholdProduct,
+    onAddToDiary: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(product.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                if (product.brand.isNotBlank())
+                    Text(product.brand, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                if (product.allergenicIngredients.isNotBlank())
+                    Text("⚠ ${product.allergenicIngredients}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE53935))
+            }
+            product.allergenicityScore?.let { AllergenicityBadge(it, Modifier.padding(horizontal = 4.dp)) }
+            IconButton(onClick = onAddToDiary, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Add, "Добавить в дневник", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -178,25 +348,10 @@ private fun AllergenicityResultCard(result: ProductAllergenicityResponse) {
             }
         }
 
-        // Allergens
-        if (result.allergens.isNotEmpty()) {
-            InfoChipsCard("⚠️ Содержит аллергены", result.allergens, Color(0xFFE53935))
-        }
-
-        // Cross-reactive
-        if (result.crossReactiveWith.isNotEmpty()) {
-            InfoChipsCard("🔗 Перекрёстная реактивность", result.crossReactiveWith, Color(0xFFFFA726))
-        }
-
-        // Common reactions
-        if (result.commonReactions.isNotEmpty()) {
-            InfoChipsCard("🤧 Типичные реакции", result.commonReactions, Color(0xFF9C27B0))
-        }
-
-        // Safe alternatives
-        if (result.safeAlternatives.isNotEmpty()) {
-            InfoChipsCard("✅ Безопасные альтернативы", result.safeAlternatives, Color(0xFF4CAF50))
-        }
+        if (result.allergens.isNotEmpty()) InfoChipsCard("⚠️ Содержит аллергены", result.allergens, Color(0xFFE53935))
+        if (result.crossReactiveWith.isNotEmpty()) InfoChipsCard("🔗 Перекрёстная реактивность", result.crossReactiveWith, Color(0xFFFFA726))
+        if (result.commonReactions.isNotEmpty()) InfoChipsCard("🤧 Типичные реакции", result.commonReactions, Color(0xFF9C27B0))
+        if (result.safeAlternatives.isNotEmpty()) InfoChipsCard("✅ Безопасные альтернативы", result.safeAlternatives, Color(0xFF4CAF50))
     }
 }
 

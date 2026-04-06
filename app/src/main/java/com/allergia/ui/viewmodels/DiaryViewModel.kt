@@ -3,6 +3,7 @@ package com.allergia.ui.viewmodels
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.allergia.api.DetectedFoodItem
 import com.allergia.api.FoodPhotoService
 import com.allergia.api.FoodRecognitionResult
@@ -10,6 +11,9 @@ import com.allergia.api.GeminiService
 import com.allergia.api.LabelPhotoService
 import com.allergia.api.MedicationSideEffectsResponse
 import com.allergia.api.ProductAllergenicityResponse
+import com.allergia.api.VapeRecognitionResult
+import com.allergia.utils.ImageUtils
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.allergia.data.models.*
 import com.allergia.data.repository.DiaryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,7 +27,8 @@ class DiaryViewModel @Inject constructor(
     private val repository: DiaryRepository,
     private val geminiService: GeminiService,
     private val foodPhotoService: FoodPhotoService,
-    private val labelPhotoService: LabelPhotoService
+    private val labelPhotoService: LabelPhotoService,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
@@ -72,6 +77,14 @@ class DiaryViewModel @Inject constructor(
 
     private val _sideEffectsState = MutableStateFlow<SideEffectsUiState>(SideEffectsUiState.Idle)
     val sideEffectsState: StateFlow<SideEffectsUiState> = _sideEffectsState.asStateFlow()
+
+    private val _vapePhotoState = MutableStateFlow<VapePhotoState>(VapePhotoState.Idle)
+    val vapePhotoState: StateFlow<VapePhotoState> = _vapePhotoState.asStateFlow()
+
+    // Все продукты с оценками аллергенности — для экрана поиска/оценки
+    val allProductsWithScores: StateFlow<List<HouseholdProduct>> = repository.getAllProductsWithScores()
+        .map { products -> products.distinctBy { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
@@ -213,12 +226,18 @@ class DiaryViewModel @Inject constructor(
 
     // ─── Food ────────────────────────────────────────────────────────────────
 
-    fun addFoodItem(name: String, amount: String, mealType: MealType) {
+    fun addFoodItem(name: String, amount: String, mealType: MealType, ingredients: String = "") {
         if (name.isBlank()) return
         viewModelScope.launch {
             val date = _selectedDate.value
             repository.getOrCreateEntry(date)
-            val item = FoodItem(entryDate = date, name = name.trim(), amount = amount.trim(), mealType = mealType)
+            val item = FoodItem(
+                entryDate = date,
+                name = name.trim(),
+                amount = amount.trim(),
+                mealType = mealType,
+                ingredients = ingredients.trim()
+            )
             val id = repository.insertFoodItem(item)
             assessAllergenicity(item.copy(id = id))
         }
@@ -299,6 +318,27 @@ class DiaryViewModel @Inject constructor(
             }
         }
     }
+
+    fun analyzeVapePhoto(imageUri: Uri) {
+        _vapePhotoState.value = VapePhotoState.Analyzing
+        viewModelScope.launch {
+            try {
+                val base64 = ImageUtils.uriToBase64(context, imageUri)
+                geminiService.recognizeVapeFromPhoto(base64)
+                    .onSuccess { result -> _vapePhotoState.value = VapePhotoState.Results(result) }
+                    .onFailure { err -> _vapePhotoState.value = VapePhotoState.Error(err.message ?: "Ошибка распознавания") }
+            } catch (e: Exception) {
+                _vapePhotoState.value = VapePhotoState.Error(e.message ?: "Ошибка обработки фото")
+            }
+        }
+    }
+
+    fun confirmVapeFromPhoto(result: VapeRecognitionResult) {
+        addVapeSession(result.brand, result.flavor, result.nicotineLevel, result.pgVgRatio, result.notes)
+        _vapePhotoState.value = VapePhotoState.Idle
+    }
+
+    fun dismissVapePhoto() { _vapePhotoState.value = VapePhotoState.Idle }
 
     fun addVapeSession(brand: String, flavor: String, nicotineLevel: String, pgVgRatio: String, notes: String) {
         viewModelScope.launch {
@@ -407,4 +447,11 @@ sealed class SideEffectsUiState {
     data class Loading(val medicationName: String) : SideEffectsUiState()
     data class Success(val result: MedicationSideEffectsResponse) : SideEffectsUiState()
     data class Error(val message: String) : SideEffectsUiState()
+}
+
+sealed class VapePhotoState {
+    object Idle : VapePhotoState()
+    object Analyzing : VapePhotoState()
+    data class Results(val result: VapeRecognitionResult) : VapePhotoState()
+    data class Error(val message: String) : VapePhotoState()
 }

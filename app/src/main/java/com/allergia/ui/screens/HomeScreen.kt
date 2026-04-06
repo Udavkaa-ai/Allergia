@@ -29,9 +29,10 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onNavigateToDiary: () -> Unit,
+    onNavigateToDiary: (java.time.LocalDate) -> Unit,
     onNavigateToAnalysis: () -> Unit,
     onNavigateToSearch: () -> Unit,
+    onNavigateToAllergyTest: () -> Unit = {},
     viewModel: DiaryViewModel = hiltViewModel()
 ) {
     val selectedDate by viewModel.selectedDate.collectAsState()
@@ -78,7 +79,10 @@ fun HomeScreen(
             // Calendar strip
             CalendarStrip(
                 selectedDate = selectedDate,
-                onDateSelected = viewModel::selectDate
+                onDateSelected = { date ->
+                    viewModel.selectDate(date)
+                    onNavigateToDiary(date)
+                }
             )
 
             Spacer(Modifier.height(8.dp))
@@ -130,7 +134,7 @@ fun HomeScreen(
                 icon = Icons.Default.Edit,
                 title = "Заполнить дневник",
                 subtitle = "Еда, медикаменты, кожа, симптомы",
-                onClick = onNavigateToDiary
+                onClick = { onNavigateToDiary(selectedDate) }
             )
 
             Spacer(Modifier.height(8.dp))
@@ -151,6 +155,16 @@ fun HomeScreen(
                 subtitle = "Проверить любой продукт питания",
                 onClick = onNavigateToSearch,
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            QuickActionButton(
+                icon = Icons.Default.Biotech,
+                title = "Тесты на аллергены",
+                subtitle = "Анализ результатов по фото + учёт в AI-анализе",
+                onClick = onNavigateToAllergyTest,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
 
             Spacer(Modifier.height(16.dp))
@@ -192,7 +206,7 @@ fun HomeScreen(
                         "...ещё ${foodItems.size - 5}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 20.dp).clickable { onNavigateToDiary() }
+                        modifier = Modifier.padding(horizontal = 20.dp).clickable { onNavigateToDiary(selectedDate) }
                     )
                 }
                 Spacer(Modifier.height(16.dp))

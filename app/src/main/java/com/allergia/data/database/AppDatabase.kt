@@ -15,9 +15,10 @@ import com.allergia.data.models.*
         AnalysisResult::class,
         HouseholdProduct::class,
         VapeSession::class,
-        ProfileItem::class
+        ProfileItem::class,
+        AllergyTestResult::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

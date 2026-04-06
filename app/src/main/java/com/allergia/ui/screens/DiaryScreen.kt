@@ -28,6 +28,7 @@ import com.allergia.ui.viewmodels.DiaryViewModel
 import com.allergia.ui.viewmodels.LabelAnalysisState
 import com.allergia.ui.viewmodels.PhotoAnalysisState
 import com.allergia.ui.viewmodels.SideEffectsUiState
+import com.allergia.ui.viewmodels.VapePhotoState
 import com.allergia.utils.ImageUtils
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -37,9 +38,16 @@ import java.util.Locale
 fun DiaryScreen(
     onBack: () -> Unit,
     onNavigateToArchive: () -> Unit = {},
+    initialDate: java.time.LocalDate = java.time.LocalDate.now(),
     viewModel: DiaryViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+
+    // Set initial date from navigation argument
+    LaunchedEffect(initialDate) {
+        viewModel.selectDate(initialDate)
+    }
+
     val selectedDate by viewModel.selectedDate.collectAsState()
     val foodItems by viewModel.foodItems.collectAsState()
     val medications by viewModel.medications.collectAsState()
@@ -50,6 +58,7 @@ fun DiaryScreen(
     val householdProducts by viewModel.householdProducts.collectAsState()
     val vapeSessions by viewModel.vapeSessions.collectAsState()
     val sideEffectsState by viewModel.sideEffectsState.collectAsState()
+    val vapePhotoState by viewModel.vapePhotoState.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -65,10 +74,13 @@ fun DiaryScreen(
     var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
     // URI для снимка этикетки (химия/косметика)
     var labelPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    // URI для снимка вейпа
+    var vapePhotoUri by remember { mutableStateOf<Uri?>(null) }
 
     var showPhotoSourceSheet by remember { mutableStateOf(false) }
     var showLabelPhotoSheet by remember { mutableStateOf(false) }
     var showCategorySheet by remember { mutableStateOf(false) }
+    var showVapePhotoSheet by remember { mutableStateOf(false) }
 
     // Лаунчер камеры (еда)
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -86,6 +98,15 @@ fun DiaryScreen(
     // Лаунчер галереи (этикетка)
     val labelGalleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { labelPhotoUri = it; viewModel.analyzeLabelPhoto(it) }
+    }
+
+    // Лаунчер камеры (вейп)
+    val vapeCameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) vapePhotoUri?.let { viewModel.analyzeVapePhoto(it) }
+    }
+    // Лаунчер галереи (вейп)
+    val vapeGalleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { vapePhotoUri = it; viewModel.analyzeVapePhoto(it) }
     }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -111,6 +132,18 @@ fun DiaryScreen(
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             labelPhotoUri = uri
             labelCameraLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    fun launchVapeCamera() {
+        val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasPerm) {
+            val file = ImageUtils.createTempPhotoFile(context)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            vapePhotoUri = uri
+            vapeCameraLauncher.launch(uri)
         } else {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
@@ -199,6 +232,34 @@ fun DiaryScreen(
         else -> {}
     }
 
+    // Vape photo state dialogs
+    when (val vs = vapePhotoState) {
+        is VapePhotoState.Analyzing -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Распознавание вейпа") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text("Анализирую фото...")
+                }
+            },
+            confirmButton = {}
+        )
+        is VapePhotoState.Results -> VapePhotoResultDialog(
+            result = vs.result,
+            onConfirm = { viewModel.confirmVapeFromPhoto(vs.result) },
+            onDismiss = viewModel::dismissVapePhoto
+        )
+        is VapePhotoState.Error -> AlertDialog(
+            onDismissRequest = viewModel::dismissVapePhoto,
+            title = { Text("Ошибка распознавания") },
+            text = { Text(vs.message) },
+            confirmButton = { TextButton(onClick = viewModel::dismissVapePhoto) { Text("OK") } }
+        )
+        else -> {}
+    }
+
     // Category chooser — Food vs Chemistry
     if (showCategorySheet) {
         ModalBottomSheet(onDismissRequest = { showCategorySheet = false }) {
@@ -251,6 +312,36 @@ fun DiaryScreen(
         }
     }
 
+    // Vape photo source sheet
+    if (showVapePhotoSheet) {
+        ModalBottomSheet(onDismissRequest = { showVapePhotoSheet = false }) {
+            Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+                Text("Сфотографируйте вейп или жидкость", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ElevatedButton(
+                        onClick = { showVapePhotoSheet = false; launchVapeCamera() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📷", style = MaterialTheme.typography.headlineMedium)
+                            Text("Камера", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    ElevatedButton(
+                        onClick = { showVapePhotoSheet = false; vapeGalleryLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🖼", style = MaterialTheme.typography.headlineMedium)
+                            Text("Галерея", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
     // ── Main content ─────────────────────────────────────────────────────────
 
     Scaffold(
@@ -289,7 +380,7 @@ fun DiaryScreen(
         ) {
             FoodSection(
                 items = foodItems,
-                onAdd = { name, amount, type -> viewModel.addFoodItem(name, amount, type) },
+                onAdd = { name, amount, type, ingredients -> viewModel.addFoodItem(name, amount, type, ingredients) },
                 onDelete = viewModel::deleteFoodItem,
                 onPhotoClick = { showPhotoSourceSheet = true },
                 onArchiveClick = onNavigateToArchive
@@ -314,7 +405,8 @@ fun DiaryScreen(
                 sessions = vapeSessions,
                 onAdd = { brand, flavor, nic, pgvg, notes -> viewModel.addVapeSession(brand, flavor, nic, pgvg, notes) },
                 onDelete = viewModel::deleteVapeSession,
-                onCopyYesterday = viewModel::copyYesterdayVape
+                onCopyYesterday = viewModel::copyYesterdayVape,
+                onScanPhoto = { showVapePhotoSheet = true }
             )
 
             SkinConditionSection(
@@ -340,7 +432,7 @@ fun DiaryScreen(
 @Composable
 private fun FoodSection(
     items: List<FoodItem>,
-    onAdd: (String, String, MealType) -> Unit,
+    onAdd: (String, String, MealType, String) -> Unit,
     onDelete: (FoodItem) -> Unit,
     onPhotoClick: () -> Unit,
     onArchiveClick: () -> Unit = {}
@@ -399,7 +491,7 @@ private fun FoodSection(
     if (showDialog) {
         AddFoodDialog(
             onDismiss = { showDialog = false },
-            onConfirm = { name, amount, type -> onAdd(name, amount, type); showDialog = false }
+            onConfirm = { name, amount, type, ingredients -> onAdd(name, amount, type, ingredients); showDialog = false }
         )
     }
 }
@@ -415,6 +507,9 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
             if (food.amount.isNotBlank()) {
                 Text(food.amount, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
+            if (food.ingredients.isNotBlank()) {
+                Text("Состав: ${food.ingredients}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            }
             if (food.knownAllergens.isNotBlank()) {
                 Text("⚠ ${food.knownAllergens}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFA726))
             }
@@ -428,9 +523,10 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, MealType) -> Unit) {
+private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, MealType, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    var ingredients by remember { mutableStateOf("") }
     var mealType by remember { mutableStateOf(MealType.OTHER) }
     var expanded by remember { mutableStateOf(false) }
 
@@ -438,9 +534,20 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
         onDismissRequest = onDismiss,
         title = { Text("Добавить продукт вручную") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Количество (200г, 1 стакан)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = ingredients,
+                    onValueChange = { ingredients = it },
+                    label = { Text("Состав / ингредиенты") },
+                    placeholder = { Text("Например: помидор, огурец, масло, соль") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(value = mealType.displayName, onValueChange = {}, readOnly = true, label = { Text("Приём пищи") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -451,7 +558,7 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType) }, enabled = name.isNotBlank()) { Text("Добавить") } },
+        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType, ingredients) }, enabled = name.isNotBlank()) { Text("Добавить") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
 }
@@ -468,6 +575,13 @@ private fun HouseholdProductsSection(
     onScanLabel: () -> Unit
 ) {
     var showManualDialog by remember { mutableStateOf(false) }
+    var sortByAllergenicity by remember { mutableStateOf(false) }
+
+    val displayItems = if (sortByAllergenicity) {
+        items.sortedBy { it.allergenicityScore ?: 0f }
+    } else {
+        items
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -478,6 +592,18 @@ private fun HouseholdProductsSection(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
+                // Sort toggle
+                FilledTonalIconButton(
+                    onClick = { sortByAllergenicity = !sortByAllergenicity },
+                    modifier = Modifier.size(36.dp),
+                    colors = if (sortByAllergenicity)
+                        IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    else
+                        IconButtonDefaults.filledTonalIconButtonColors()
+                ) {
+                    Icon(Icons.Default.Sort, "Сортировка по аллергенности", modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(4.dp))
                 FilledTonalIconButton(onClick = onScanLabel, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.DocumentScanner, "Сканировать состав", modifier = Modifier.size(18.dp))
                 }
@@ -489,17 +615,27 @@ private fun HouseholdProductsSection(
             Spacer(Modifier.height(4.dp))
             // Count persistent vs one-time
             val persistentCount = items.count { it.isPersistent }
-            val hint = if (persistentCount > 0)
-                "📌 $persistentCount постоянных · остальные только сегодня"
-            else
-                "Добавьте средства, которые используете ежедневно"
+            val hint = buildString {
+                if (persistentCount > 0) append("📌 $persistentCount постоянных · ")
+                if (sortByAllergenicity) append("↑ Сортировка: от наименее аллергенного")
+                else if (persistentCount == 0) append("Добавьте средства, которые используете ежедневно")
+            }.ifBlank { "Добавьте средства, которые используете ежедневно" }
             Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(Modifier.height(8.dp))
 
             if (items.isEmpty()) {
                 EmptyHint("📷 Сканируйте этикетку или добавьте вручную")
+            } else if (sortByAllergenicity) {
+                // Flat sorted list (no category grouping when sorted)
+                displayItems.forEach { product ->
+                    HouseholdProductRow(
+                        product = product,
+                        onDelete = { onDelete(product) },
+                        onTogglePersistence = { onTogglePersistence(product) }
+                    )
+                }
             } else {
-                items.groupBy { it.category }.forEach { (cat, group) ->
+                displayItems.groupBy { it.category }.forEach { (cat, group) ->
                     Text(
                         "${cat.emoji} ${cat.displayName}",
                         style = MaterialTheme.typography.labelMedium,
@@ -774,9 +910,11 @@ private fun VapeSection(
     sessions: List<VapeSession>,
     onAdd: (String, String, String, String, String) -> Unit,
     onDelete: (VapeSession) -> Unit,
-    onCopyYesterday: () -> Unit = {}
+    onCopyYesterday: () -> Unit = {},
+    onScanPhoto: () -> Unit = {}
 ) {
     var showDialog by remember { mutableStateOf(false) }
+    var prefillResult by remember { mutableStateOf<com.allergia.api.VapeRecognitionResult?>(null) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -791,6 +929,10 @@ private fun VapeSection(
                     }
                     Spacer(Modifier.width(2.dp))
                 }
+                FilledTonalIconButton(onClick = onScanPhoto, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.CameraAlt, "Сканировать фото", modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(4.dp))
                 FilledTonalIconButton(onClick = { showDialog = true }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Add, "Добавить", modifier = Modifier.size(18.dp))
                 }
@@ -824,13 +966,14 @@ private fun VapeSection(
     }
 
     if (showDialog) {
-        var brand by remember { mutableStateOf("") }
-        var flavor by remember { mutableStateOf("") }
-        var nicotineLevel by remember { mutableStateOf("") }
-        var pgVgRatio by remember { mutableStateOf("") }
-        var notes by remember { mutableStateOf("") }
+        val pre = prefillResult
+        var brand by remember(pre) { mutableStateOf(pre?.brand ?: "") }
+        var flavor by remember(pre) { mutableStateOf(pre?.flavor ?: "") }
+        var nicotineLevel by remember(pre) { mutableStateOf(pre?.nicotineLevel ?: "") }
+        var pgVgRatio by remember(pre) { mutableStateOf(pre?.pgVgRatio ?: "") }
+        var notes by remember(pre) { mutableStateOf(pre?.notes ?: "") }
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { showDialog = false; prefillResult = null },
             title = { Text("Добавить запись о вейпе") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -842,11 +985,36 @@ private fun VapeSection(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { onAdd(brand, flavor, nicotineLevel, pgVgRatio, notes); showDialog = false }) { Text("Добавить") }
+                TextButton(onClick = { onAdd(brand, flavor, nicotineLevel, pgVgRatio, notes); showDialog = false; prefillResult = null }) { Text("Добавить") }
             },
-            dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Отмена") } }
+            dismissButton = { TextButton(onClick = { showDialog = false; prefillResult = null }) { Text("Отмена") } }
         )
     }
+}
+
+// ─── Vape Photo Result Dialog ───────────────────────────────────��──────────────
+
+@Composable
+private fun VapePhotoResultDialog(
+    result: com.allergia.api.VapeRecognitionResult,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Распознан вейп") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (result.brand.isNotBlank()) Text("Бренд: ${result.brand}", style = MaterialTheme.typography.bodyMedium)
+                if (result.flavor.isNotBlank()) Text("Вкус: ${result.flavor}", style = MaterialTheme.typography.bodyMedium)
+                if (result.nicotineLevel.isNotBlank()) Text("Никотин: ${result.nicotineLevel}", style = MaterialTheme.typography.bodySmall)
+                if (result.pgVgRatio.isNotBlank()) Text("PG/VG: ${result.pgVgRatio}", style = MaterialTheme.typography.bodySmall)
+                if (result.notes.isNotBlank()) Text(result.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            }
+        },
+        confirmButton = { Button(onClick = onConfirm) { Text("Добавить в дневник") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
 }
 
 // ─── Medication Side Effects Dialog ───────────────────────────────────────────
