@@ -890,31 +890,9 @@ private fun SkinConditionSection(condition: SkinCondition?, onSave: (Int, Int, I
     }
 }
 
-// ─── Symptoms Section ─────────────────────────────────────────────────────────
-
-@Composable
-private fun SymptomsSection(symptoms: List<AllergySymptom>, onToggle: (SymptomType, Int) -> Unit) {
-    var expanded by remember { mutableStateOf(true) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("🤧 Симптомы аллергии", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                IconButton(onClick = { expanded = !expanded }) { Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null) }
-            }
-            AnimatedVisibility(visible = expanded) {
-                Column {
-                    Spacer(Modifier.height(8.dp))
-                    SymptomType.entries.forEach { type ->
-                        val current = symptoms.find { it.symptomType == type }?.severity ?: 0
-                        SeverityRow(label = "${type.emoji} ${type.displayName}", value = current, onValueChange = { onToggle(type, it) })
-                        Spacer(Modifier.height(4.dp))
-                    }
-                }
-            }
-        }
-    }
-}
+// ─── Symptoms Section — removed per UX feedback ──────────────────────────────
+// SymptomsSection has been removed; AllergySymptom data is still persisted in DB
+// but no longer surfaced in the diary UI.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
