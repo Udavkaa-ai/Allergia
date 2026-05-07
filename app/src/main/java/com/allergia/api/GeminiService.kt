@@ -338,7 +338,6 @@ $diaryContext
         val allDates = (data.foods.map { it.entryDate } +
                 data.medications.map { it.entryDate } +
                 data.skinConditions.map { it.entryDate } +
-                data.symptoms.map { it.entryDate } +
                 data.householdProducts.map { it.entryDate } +
                 data.vapeSessions.map { it.entryDate }).toSortedSet()
 
@@ -349,14 +348,14 @@ $diaryContext
             if (foods.isNotEmpty()) {
                 sb.appendLine("🍽 Питание:")
                 foods.groupBy { it.mealType }.forEach { (meal, items) ->
-                    sb.append("  ${meal.displayName}: ")
-                    sb.appendLine(items.joinToString(", ") { item ->
-                        buildString {
-                            append(item.name)
-                            if (item.amount.isNotBlank()) append(" (${item.amount})")
-                            if (item.allergenicityScore != null) append(" [аллергенность: ${(item.allergenicityScore * 100).toInt()}%]")
-                        }
-                    })
+                    sb.appendLine("  ${meal.displayName}:")
+                    items.forEach { item ->
+                        sb.append("    • ${item.name}")
+                        if (item.amount.isNotBlank()) sb.append(" (${item.amount})")
+                        if (item.allergenicityScore != null) sb.append(" [аллергенность: ${(item.allergenicityScore * 100).toInt()}%]")
+                        if (!item.notes.isNullOrBlank()) sb.append(" — состав/заметки: ${item.notes}")
+                        sb.appendLine()
+                    }
                 }
             }
 
@@ -367,6 +366,7 @@ $diaryContext
                     sb.append("  • ${med.name}")
                     if (med.dose.isNotBlank()) sb.append(", ${med.dose}")
                     if (med.isAntihistamine) sb.append(" [антигистаминный]")
+                    if (med.notes.isNotBlank()) sb.append(" — заметки: ${med.notes}")
                     sb.appendLine()
                 }
             }
@@ -378,15 +378,19 @@ $diaryContext
                 if (skin.redness > 0) sb.appendLine("  • Покраснение: ${skin.redness}/3")
                 if (skin.rash > 0) sb.appendLine("  • Сыпь: ${skin.rash}/3")
                 if (skin.swelling > 0) sb.appendLine("  • Отёк: ${skin.swelling}/3")
-                if (skin.affectedAreas.isNotBlank()) sb.appendLine("  • Зоны: ${skin.affectedAreas}")
-            }
-
-            val symptoms = data.symptoms.filter { it.entryDate == date }
-            if (symptoms.isNotEmpty()) {
-                sb.appendLine("🤧 Симптомы:")
-                symptoms.forEach { s ->
-                    sb.appendLine("  • ${s.symptomType.displayName}: ${s.severity}/3")
+                if (skin.dryness > 0) sb.appendLine("  • Шелушение: ${skin.dryness}/3")
+                val bodyPartJson = skin.bodyPartStates
+                if (!bodyPartJson.isNullOrBlank()) {
+                    try {
+                        val type = object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
+                        val parts: Map<String, String> = com.google.gson.Gson().fromJson(bodyPartJson, type)
+                        val active = parts.filter { it.value.isNotBlank() }
+                        if (active.isNotEmpty()) {
+                            sb.appendLine("  • Поражённые области: " + active.entries.joinToString(", ") { "${it.key} (${it.value})" })
+                        }
+                    } catch (_: Exception) {}
                 }
+                if (skin.notes.isNotBlank()) sb.appendLine("  • Заметки: ${skin.notes}")
             }
 
             // Household products & cosmetics — ключевые для контактного дерматита
@@ -394,15 +398,15 @@ $diaryContext
             if (products.isNotEmpty()) {
                 sb.appendLine("🧴 Химия и косметика:")
                 products.groupBy { it.category }.forEach { (cat, group) ->
-                    sb.append("  ${cat.emoji} ${cat.displayName}: ")
-                    sb.appendLine(group.joinToString(", ") { p ->
-                        buildString {
-                            append(p.name)
-                            if (p.brand.isNotBlank()) append(" (${p.brand})")
-                            if (p.allergenicityScore != null) append(" [аллергенность: ${(p.allergenicityScore * 100).toInt()}%]")
-                            if (p.allergenicIngredients.isNotBlank()) append(" [⚠ ${p.allergenicIngredients}]")
-                        }
-                    })
+                    sb.appendLine("  ${cat.emoji} ${cat.displayName}:")
+                    group.forEach { p ->
+                        sb.append("    • ${p.name}")
+                        if (p.brand.isNotBlank()) sb.append(" (${p.brand})")
+                        if (p.allergenicityScore != null) sb.append(" [аллергенность: ${(p.allergenicityScore * 100).toInt()}%]")
+                        if (p.allergenicIngredients.isNotBlank()) sb.append(" [⚠ ${p.allergenicIngredients}]")
+                        if (p.notes.isNotBlank()) sb.append(" — заметки: ${p.notes}")
+                        sb.appendLine()
+                    }
                 }
             }
 
