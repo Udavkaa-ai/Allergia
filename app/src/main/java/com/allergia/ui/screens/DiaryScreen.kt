@@ -3,6 +3,7 @@ package com.allergia.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -30,6 +31,8 @@ import com.allergia.ui.viewmodels.PhotoAnalysisState
 import com.allergia.ui.viewmodels.SideEffectsUiState
 import com.allergia.ui.viewmodels.VapePhotoState
 import com.allergia.utils.ImageUtils
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -52,7 +55,6 @@ fun DiaryScreen(
     val foodItems by viewModel.foodItems.collectAsState()
     val medications by viewModel.medications.collectAsState()
     val skinCondition by viewModel.skinCondition.collectAsState()
-    val symptoms by viewModel.symptoms.collectAsState()
     val photoState by viewModel.photoAnalysisState.collectAsState()
     val labelState by viewModel.labelAnalysisState.collectAsState()
     val householdProducts by viewModel.householdProducts.collectAsState()
@@ -380,7 +382,7 @@ fun DiaryScreen(
         ) {
             FoodSection(
                 items = foodItems,
-                onAdd = { name, amount, type -> viewModel.addFoodItem(name, amount, type) },
+                onAdd = { name, amount, type, notes -> viewModel.addFoodItem(name, amount, type, notes) },
                 onDelete = viewModel::deleteFoodItem,
                 onPhotoClick = { showPhotoSourceSheet = true },
                 onArchiveClick = onNavigateToArchive
@@ -388,14 +390,14 @@ fun DiaryScreen(
 
             MedicationsSection(
                 items = medications,
-                onAdd = { name, dose, isAnti -> viewModel.addMedication(name, dose, isAnti) },
+                onAdd = { name, dose, isAnti, notes -> viewModel.addMedication(name, dose, isAnti, notes) },
                 onDelete = viewModel::deleteMedication,
                 onSideEffects = { name, dose -> viewModel.checkMedicationSideEffects(name, dose) }
             )
 
             HouseholdProductsSection(
                 items = householdProducts,
-                onAddManual = { name, brand, cat, persist -> viewModel.addHouseholdProductManualPersistent(name, brand, cat, persist) },
+                onAddManual = { name, brand, cat, persist, notes -> viewModel.addHouseholdProductManualPersistent(name, brand, cat, persist, notes) },
                 onDelete = viewModel::deleteHouseholdProduct,
                 onTogglePersistence = viewModel::toggleProductPersistence,
                 onScanLabel = { showLabelPhotoSheet = true }
@@ -411,14 +413,9 @@ fun DiaryScreen(
 
             SkinConditionSection(
                 condition = skinCondition,
-                onSave = { overall, redness, itching, rash, swelling, dryness, areas, notes ->
-                    viewModel.saveSkinCondition(overall, redness, itching, rash, swelling, dryness, areas, notes)
+                onSave = { overall, redness, itching, rash, swelling, dryness, bodyPartStates, notes ->
+                    viewModel.saveSkinCondition(overall, redness, itching, rash, swelling, dryness, bodyPartStates, notes)
                 }
-            )
-
-            SymptomsSection(
-                symptoms = symptoms,
-                onToggle = viewModel::toggleSymptom
             )
 
             Spacer(Modifier.height(80.dp)) // FAB clearance
@@ -432,7 +429,7 @@ fun DiaryScreen(
 @Composable
 private fun FoodSection(
     items: List<FoodItem>,
-    onAdd: (String, String, MealType) -> Unit,
+    onAdd: (String, String, MealType, String) -> Unit,
     onDelete: (FoodItem) -> Unit,
     onPhotoClick: () -> Unit,
     onArchiveClick: () -> Unit = {}
@@ -491,7 +488,7 @@ private fun FoodSection(
     if (showDialog) {
         AddFoodDialog(
             onDismiss = { showDialog = false },
-            onConfirm = { name, amount, type -> onAdd(name, amount, type); showDialog = false }
+            onConfirm = { name, amount, type, notes -> onAdd(name, amount, type, notes); showDialog = false }
         )
     }
 }
@@ -507,6 +504,9 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
             if (food.amount.isNotBlank()) {
                 Text(food.amount, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
+            if (!food.notes.isNullOrBlank()) {
+                Text(food.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            }
             if (food.knownAllergens.isNotBlank()) {
                 Text("⚠ ${food.knownAllergens}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFA726))
             }
@@ -520,11 +520,12 @@ private fun FoodItemRow(food: FoodItem, onDelete: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, MealType) -> Unit) {
+private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, MealType, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var mealType by remember { mutableStateOf(MealType.OTHER) }
     var expanded by remember { mutableStateOf(false) }
+    var notes by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -543,9 +544,10 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
                         }
                     }
                 }
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Заметки / состав") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             }
         },
-        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType) }, enabled = name.isNotBlank()) { Text("Добавить") } },
+        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, amount, mealType, notes) }, enabled = name.isNotBlank()) { Text("Добавить") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
 }
@@ -556,7 +558,7 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onConfirm: (String, String, Mea
 @Composable
 private fun HouseholdProductsSection(
     items: List<HouseholdProduct>,
-    onAddManual: (String, String, ProductCategory, Boolean) -> Unit,
+    onAddManual: (String, String, ProductCategory, Boolean, String) -> Unit,
     onDelete: (HouseholdProduct) -> Unit,
     onTogglePersistence: (HouseholdProduct) -> Unit,
     onScanLabel: () -> Unit
@@ -644,7 +646,7 @@ private fun HouseholdProductsSection(
     if (showManualDialog) {
         AddHouseholdProductDialog(
             onDismiss = { showManualDialog = false },
-            onConfirm = { name, brand, cat, persist -> onAddManual(name, brand, cat, persist); showManualDialog = false }
+            onConfirm = { name, brand, cat, persist, notes -> onAddManual(name, brand, cat, persist, notes); showManualDialog = false }
         )
     }
 }
@@ -666,6 +668,9 @@ private fun HouseholdProductRow(
                     Spacer(Modifier.width(4.dp))
                     Text(product.brand, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
+            }
+            if (product.notes.isNotBlank()) {
+                Text(product.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
             if (product.allergenicIngredients.isNotBlank()) {
                 Text("⚠ ${product.allergenicIngredients}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE53935))
@@ -693,13 +698,14 @@ private fun HouseholdProductRow(
 @Composable
 private fun AddHouseholdProductDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, ProductCategory, Boolean) -> Unit
+    onConfirm: (String, String, ProductCategory, Boolean, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var brand by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(ProductCategory.OTHER) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var isPersistent by remember { mutableStateOf(true) }
+    var notes by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -736,10 +742,11 @@ private fun AddHouseholdProductDialog(
                         Text("Не нужно вносить повторно", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     }
                 }
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Заметки") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, brand, category, isPersistent) }, enabled = name.isNotBlank()) { Text("Добавить") }
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name, brand, category, isPersistent, notes) }, enabled = name.isNotBlank()) { Text("Добавить") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
@@ -750,7 +757,7 @@ private fun AddHouseholdProductDialog(
 @Composable
 private fun MedicationsSection(
     items: List<Medication>,
-    onAdd: (String, String, Boolean) -> Unit,
+    onAdd: (String, String, Boolean, String) -> Unit,
     onDelete: (Medication) -> Unit,
     onSideEffects: (String, String) -> Unit
 ) {
@@ -765,6 +772,7 @@ private fun MedicationsSection(
                     Column(Modifier.weight(1f)) {
                         Text(med.name, style = MaterialTheme.typography.bodyMedium)
                         if (med.dose.isNotBlank()) Text(med.dose, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        if (med.notes.isNotBlank()) Text(med.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                         if (med.isAntihistamine) Text("Антигистаминный", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2196F3))
                     }
                     IconButton(onClick = { onSideEffects(med.name, med.dose) }, modifier = Modifier.size(32.dp)) {
@@ -780,6 +788,7 @@ private fun MedicationsSection(
         var name by remember { mutableStateOf("") }
         var dose by remember { mutableStateOf("") }
         var isAnti by remember { mutableStateOf(false) }
+        var notes by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showDialog = false },
             title = { Text("Добавить медикамент") },
@@ -791,15 +800,30 @@ private fun MedicationsSection(
                         Checkbox(checked = isAnti, onCheckedChange = { isAnti = it })
                         Text("Антигистаминный препарат")
                     }
+                    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Заметки") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                 }
             },
-            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { onAdd(name, dose, isAnti); showDialog = false } }, enabled = name.isNotBlank()) { Text("Добавить") } },
+            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { onAdd(name, dose, isAnti, notes); showDialog = false } }, enabled = name.isNotBlank()) { Text("Добавить") } },
             dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Отмена") } }
         )
     }
 }
 
 // ─── Skin Condition Section ───────────────────────────────────────────────────
+
+private val BODY_PARTS = listOf("Ноги", "Руки", "Пальцы", "Лицо", "Голова", "Уши")
+private val BODY_PART_STATES = listOf("", "покраснение", "шелушение")
+
+private fun parseBodyPartMap(json: String?): MutableMap<String, String> {
+    if (json.isNullOrBlank()) return BODY_PARTS.associateWith { "" }.toMutableMap()
+    return try {
+        val type = object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
+        val parsed: Map<String, String> = com.google.gson.Gson().fromJson(json, type)
+        BODY_PARTS.associateWith { parsed[it] ?: "" }.toMutableMap()
+    } catch (e: Exception) {
+        BODY_PARTS.associateWith { "" }.toMutableMap()
+    }
+}
 
 @Composable
 private fun SkinConditionSection(condition: SkinCondition?, onSave: (Int, Int, Int, Int, Int, Int, String, String) -> Unit) {
@@ -809,7 +833,7 @@ private fun SkinConditionSection(condition: SkinCondition?, onSave: (Int, Int, I
     var rash by remember(condition) { mutableIntStateOf(condition?.rash ?: 0) }
     var swelling by remember(condition) { mutableIntStateOf(condition?.swelling ?: 0) }
     var dryness by remember(condition) { mutableIntStateOf(condition?.dryness ?: 0) }
-    var areas by remember(condition) { mutableStateOf(condition?.affectedAreas ?: "") }
+    var bodyPartStates by remember(condition) { mutableStateOf(parseBodyPartMap(condition?.bodyPartStates)) }
     var notes by remember(condition) { mutableStateOf(condition?.notes ?: "") }
     var expanded by remember { mutableStateOf(condition != null && condition.overallSeverity > 0) }
 
@@ -829,11 +853,35 @@ private fun SkinConditionSection(condition: SkinCondition?, onSave: (Int, Int, I
                     SeverityRow("Отёк", swelling, { swelling = it })
                     SeverityRow("Шелушение", dryness, { dryness = it })
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = areas, onValueChange = { areas = it }, label = { Text("Поражённые области") }, placeholder = { Text("лицо, шея, руки...") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("Области поражения", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Spacer(Modifier.height(4.dp))
+                    BODY_PARTS.forEach { part ->
+                        val state = bodyPartStates[part] ?: ""
+                        val nextState = BODY_PART_STATES[(BODY_PART_STATES.indexOf(state) + 1) % BODY_PART_STATES.size]
+                        val (chipColor, chipLabel) = when (state) {
+                            "покраснение" -> Color(0xFFFFCDD2) to "покраснение"
+                            "шелушение"   -> Color(0xFFFFE0B2) to "шелушение"
+                            else          -> MaterialTheme.colorScheme.surfaceVariant to "нет"
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(part, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = chipColor,
+                                modifier = Modifier.clickable { bodyPartStates = bodyPartStates.toMutableMap().also { it[part] = nextState } }
+                            ) {
+                                Text(chipLabel, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Заметки") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                     Spacer(Modifier.height(8.dp))
-                    Button(onClick = { onSave(overall, redness, itching, rash, swelling, dryness, areas, notes) }, modifier = Modifier.align(Alignment.End)) {
+                    val bodyPartJson = com.google.gson.Gson().toJson(bodyPartStates)
+                    Button(onClick = { onSave(overall, redness, itching, rash, swelling, dryness, bodyPartJson, notes) }, modifier = Modifier.align(Alignment.End)) {
                         Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Сохранить")
                     }
                 }

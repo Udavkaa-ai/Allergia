@@ -213,12 +213,12 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch { repository.updateProduct(product.copy(isPersistent = !product.isPersistent)) }
     }
 
-    fun addHouseholdProductManualPersistent(name: String, brand: String, category: ProductCategory, isPersistent: Boolean) {
+    fun addHouseholdProductManualPersistent(name: String, brand: String, category: ProductCategory, isPersistent: Boolean, notes: String = "") {
         if (name.isBlank()) return
         viewModelScope.launch {
             val date = _selectedDate.value
             repository.getOrCreateEntry(date)
-            repository.insertProduct(HouseholdProduct(entryDate = date, name = name.trim(), brand = brand.trim(), category = category, isPersistent = isPersistent))
+            repository.insertProduct(HouseholdProduct(entryDate = date, name = name.trim(), brand = brand.trim(), category = category, isPersistent = isPersistent, notes = notes.trim()))
         }
     }
 
@@ -226,7 +226,7 @@ class DiaryViewModel @Inject constructor(
 
     // ─── Food ────────────────────────────────────────────────────────────────
 
-    fun addFoodItem(name: String, amount: String, mealType: MealType) {
+    fun addFoodItem(name: String, amount: String, mealType: MealType, notes: String = "") {
         if (name.isBlank()) return
         viewModelScope.launch {
             val date = _selectedDate.value
@@ -235,7 +235,8 @@ class DiaryViewModel @Inject constructor(
                 entryDate = date,
                 name = name.trim(),
                 amount = amount.trim(),
-                mealType = mealType
+                mealType = mealType,
+                notes = notes.trim().ifBlank { null }
             )
             val id = repository.insertFoodItem(item)
             assessAllergenicity(item.copy(id = id))
@@ -277,13 +278,13 @@ class DiaryViewModel @Inject constructor(
 
     // ─── Medication ───────────────────────────────────────────────────────────
 
-    fun addMedication(name: String, dose: String, isAntihistamine: Boolean) {
+    fun addMedication(name: String, dose: String, isAntihistamine: Boolean, notes: String = "") {
         if (name.isBlank()) return
         viewModelScope.launch {
             val date = _selectedDate.value
             repository.getOrCreateEntry(date)
             repository.insertMedication(
-                Medication(entryDate = date, name = name.trim(), dose = dose.trim(), isAntihistamine = isAntihistamine)
+                Medication(entryDate = date, name = name.trim(), dose = dose.trim(), isAntihistamine = isAntihistamine, notes = notes.trim())
             )
         }
     }
@@ -369,7 +370,7 @@ class DiaryViewModel @Inject constructor(
         rash: Int,
         swelling: Int,
         dryness: Int,
-        affectedAreas: String,
+        bodyPartStates: String,
         notes: String
     ) {
         viewModelScope.launch {
@@ -386,8 +387,9 @@ class DiaryViewModel @Inject constructor(
                     rash = rash,
                     swelling = swelling,
                     dryness = dryness,
-                    affectedAreas = affectedAreas,
-                    notes = notes
+                    affectedAreas = "",
+                    notes = notes,
+                    bodyPartStates = bodyPartStates.ifBlank { null }
                 )
             )
             _toastMessage.emit("Состояние кожи сохранено")

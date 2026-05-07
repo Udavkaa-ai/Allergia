@@ -31,7 +31,8 @@ data class FoodItem(
     // AI-assessed allergenicity score 0.0–1.0
     val allergenicityScore: Float? = null,
     val allergenicityLabel: String = "",
-    val knownAllergens: String = ""   // comma-separated list
+    val knownAllergens: String = "",   // comma-separated list
+    val notes: String? = null
 )
 
 enum class MealType(val displayName: String) {

@@ -34,5 +34,6 @@ data class SkinCondition(
     val dryness: Int = 0,
     val affectedAreas: String = "",  // comma-separated body areas
     val photoPath: String? = null,
-    val notes: String = ""
+    val notes: String = "",
+    val bodyPartStates: String? = null
 )
